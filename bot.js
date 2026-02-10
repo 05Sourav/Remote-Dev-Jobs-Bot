@@ -407,10 +407,10 @@ function calculateJobPriority(job) {
   const combinedText = `${titleLower} ${descLower}`;
   let score = 50; // Base score
 
-  // Check for priority keywords (entry-level indicators) - MAJOR BOOST
+  // Check for priority keywords (entry-level indicators) - MODERATE BOOST (Reduced from 40 to 20)
   const hasPriorityKeyword = PRIORITY_KEYWORDS.some(keyword => combinedText.includes(keyword));
   if (hasPriorityKeyword) {
-    score += 40;
+    score += 20;
   }
 
   // Check for global remote keywords - ADDITIONAL BOOST
@@ -648,9 +648,48 @@ async function fetchAndPostJobs() {
       return new Date(b.publishedAt) - new Date(a.publishedAt);
     });
 
-    // Post limited number of jobs
-    const jobsToPost = qualifiedJobs.slice(0, config.postsPerBatch);
-    console.log(`📤 Posting ${jobsToPost.length} jobs...`);
+    // Balanced Selection Logic
+    // We want a mix of Full-Time and Internships (e.g., 60% FT, 40% Intern)
+    const internships = qualifiedJobs.filter(job =>
+      job.title.toLowerCase().includes('intern') ||
+      job.title.toLowerCase().includes('trainee')
+    );
+    const fullTimeJobs = qualifiedJobs.filter(job =>
+      !job.title.toLowerCase().includes('intern') &&
+      !job.title.toLowerCase().includes('trainee')
+    );
+
+    const targetTotal = config.postsPerBatch; // e.g., 5
+    const targetFT = Math.ceil(targetTotal * 0.6); // Target 3 FT
+    const targetIntern = targetTotal - targetFT;   // Target 2 Interns
+
+    let selectedFT = fullTimeJobs.slice(0, targetFT);
+    let selectedIntern = internships.slice(0, targetIntern);
+
+    // If we don't have enough FT, fill with Interns
+    if (selectedFT.length < targetFT) {
+      const needed = targetFT - selectedFT.length;
+      const extraInterns = internships.slice(targetIntern, targetIntern + needed);
+      selectedIntern = [...selectedIntern, ...extraInterns];
+    }
+
+    // If we don't have enough Interns, fill with FT
+    if (selectedIntern.length < targetIntern) {
+      const needed = targetIntern - selectedIntern.length;
+      const extraFT = fullTimeJobs.slice(targetFT, targetFT + needed);
+      selectedFT = [...selectedFT, ...extraFT];
+    }
+
+    // Combine and re-sort by priority
+    let jobsToPost = [...selectedFT, ...selectedIntern];
+
+    // Safety check: ensure we respect the limit
+    jobsToPost = jobsToPost.slice(0, config.postsPerBatch);
+
+    // Sort final selection by priority
+    jobsToPost.sort((a, b) => b.priority - a.priority);
+
+    console.log(`📤 Posting ${jobsToPost.length} jobs (${selectedFT.length} FT, ${selectedIntern.length} Interns)...`);
 
     for (const job of jobsToPost) {
       await postJobToChannel(job, job.priority);
