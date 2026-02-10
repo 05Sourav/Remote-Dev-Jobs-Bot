@@ -93,10 +93,12 @@ const EXCLUDE_KEYWORDS = [
   'accountant', 'bookkeeper', 'financial analyst', 'finance',
   'controller', 'treasurer', 'auditor', 'audit', 'compliance',
   'legal', 'lawyer', 'attorney', 'paralegal',
+  'investment analyst', 'investment', 'equity analyst', 'portfolio',
+  'wealth management', 'asset management', 'trading', 'trader',
 
   // Analysis (non-technical)
   'business analyst', 'data analyst', 'market research',
-  'strategy analyst', 'consultant', 'advisor',
+  'strategy analyst', 'consultant', 'advisor', 'consulting',
 
   // Data annotation/labeling
   'rater', 'annotator', 'labeler', 'data labeling', 'data annotation',
