@@ -882,6 +882,27 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
+// Manual trigger endpoint for job fetching
+app.get('/trigger-fetch', async (req, res) => {
+  try {
+    console.log('🔄 Manual fetch triggered via HTTP endpoint');
+    res.json({
+      status: 'started',
+      message: 'Job fetch cycle started. Check logs for progress.'
+    });
+
+    // Run fetch in background
+    fetchAndPostJobs().catch(err => {
+      console.error('Error in manual fetch:', err);
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+});
+
 app.listen(config.port, '0.0.0.0', () => {
   console.log(`🌐 Health check server running on port ${config.port}`);
 });
