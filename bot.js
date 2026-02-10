@@ -515,7 +515,9 @@ function formatJobMessage(job, priority = 0) {
 
 <i>Via ${job.source}</i>
 
-${hashtags}`;
+${hashtags}
+
+📢 Share this with a friend who’s job hunting`;
 }
 
 // Generate hashtags based on job details
