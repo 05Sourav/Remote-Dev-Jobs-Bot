@@ -7,6 +7,7 @@ const axios = require('axios');
 const Parser = require('rss-parser');
 const fs = require('fs').promises;
 const path = require('path');
+const express = require('express');
 
 // Configuration
 const config = {
@@ -15,6 +16,7 @@ const config = {
   adminId: process.env.ADMIN_TELEGRAM_ID,
   postsPerBatch: parseInt(process.env.POSTS_PER_BATCH || '5'),
   cronSchedule: process.env.CRON_SCHEDULE || '0 */3 * * *', // Every 3 hours by default
+  port: parseInt(process.env.PORT || '3000'), // For Render health checks
 };
 
 // Job keywords to filter - Software Engineering roles
@@ -862,6 +864,27 @@ async function init() {
   // Optional: Run initial fetch on startup
   // await fetchAndPostJobs();
 }
+
+// Health check server for Render
+const app = express();
+
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Remote Dev Jobs Bot is running',
+    postedJobs: postedJobs.size,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
+app.listen(config.port, () => {
+  console.log(`🌐 Health check server running on port ${config.port}`);
+});
 
 // Start bot
 init().catch(console.error);
