@@ -249,6 +249,13 @@ async function fetchRemotiveJobs() {
 async function fetchArbeitnowJobs() {
   try {
     const response = await axios.get('https://www.arbeitnow.com/api/job-board-api', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.arbeitnow.com/',
+        'Origin': 'https://www.arbeitnow.com'
+      },
       timeout: 10000
     });
 
@@ -275,7 +282,14 @@ async function fetchArbeitnowJobs() {
 // Fetch jobs from Remote OK RSS
 async function fetchRemoteOKJobs() {
   try {
-    const parser = new Parser();
+    const parser = new Parser({
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://remoteok.com/'
+      }
+    });
     const feed = await parser.parseURL('https://remoteok.com/remote-dev-jobs.rss');
 
     return feed.items.map(item => ({
