@@ -403,47 +403,13 @@ async function fetchUnstopJobs() {
 
     console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
 
-    // Allowed technical domains for Unstop
-    const ALLOWED_DOMAINS = [
-      'engineering', 'software development', 'it', 'computer science',
-      'web development', 'mobile development', 'data engineering',
-      'ai/ml', 'artificial intelligence', 'machine learning',
-      'technology', 'software', 'programming', 'coding',
-      'devops', 'cloud computing', 'cybersecurity', 'information technology'
-    ];
+    // Allowed technical domains for Unstop (REMOVED: API doesn't return domain field reliably)
+    // We will rely on the main filterJobs() function which uses rigorous keyword matching on title/description.
 
-    const REJECTED_DOMAINS = [
-      'marketing', 'business', 'hr', 'human resources', 'operations',
-      'campus ambassador', 'sales', 'general management', 'event',
-      'competition', 'finance', 'consulting', 'content', 'design'
-    ];
-
-    // Filter by domain before transformation
-    const technicalOpportunities = allOpportunities.filter(job => {
-      const domain = (job.domain || '').toLowerCase();
-      const tags = (job.tags || []).map(t => t.toLowerCase());
-      const combinedDomainText = `${domain} ${tags.join(' ')}`;
-
-      // Reject if matches rejected domains
-      const hasRejectedDomain = REJECTED_DOMAINS.some(rejected =>
-        combinedDomainText.includes(rejected)
-      );
-      if (hasRejectedDomain) {
-        return false;
-      }
-
-      // Accept if matches allowed domains
-      const hasAllowedDomain = ALLOWED_DOMAINS.some(allowed =>
-        combinedDomainText.includes(allowed)
-      );
-
-      return hasAllowedDomain;
-    });
-
-    console.log(`🎯 Filtered to ${technicalOpportunities.length} technical opportunities from Unstop`);
+    console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
 
     // Transform to standard format
-    return technicalOpportunities.map(job => {
+    return allOpportunities.map(job => {
       // Extract location from locations array
       const locations = job.locations || [];
       const locationStr = locations.map(loc => loc.city).filter(Boolean).join(', ') || 'Remote';
