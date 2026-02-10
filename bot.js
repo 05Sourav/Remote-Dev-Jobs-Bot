@@ -66,6 +66,7 @@ const EXCLUDE_KEYWORDS = [
   'marketing', 'seo', 'sem', 'social media', 'brand manager',
   'influencer', 'blogger', 'journalist',
   'marketing intern', 'marketing internship',
+  'content creation', 'digital marketing', 'social media manager',
 
   // Sales & Business
   'sales', 'account executive', 'business development', 'sales representative',
@@ -258,70 +259,7 @@ async function fetchRemotiveJobs() {
   }
 }
 
-// Fetch jobs from Arbeitnow API
-async function fetchArbeitnowJobs() {
-  try {
-    const response = await axios.get('https://www.arbeitnow.com/api/job-board-api', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.arbeitnow.com/',
-        'Origin': 'https://www.arbeitnow.com'
-      },
-      timeout: 10000
-    });
 
-    return response.data.data
-      .filter(job => job.remote === true)
-      .map(job => ({
-        id: `arbeitnow_${job.slug}`,
-        title: job.title,
-        company: job.company_name,
-        location: 'Remote',
-        type: 'Full-time',
-        salary: null,
-        url: job.url,
-        description: job.description,
-        publishedAt: job.created_at,
-        source: 'Arbeitnow'
-      }));
-  } catch (error) {
-    console.error('Error fetching Arbeitnow jobs:', error.message);
-    return [];
-  }
-}
-
-// Fetch jobs from Remote OK RSS
-async function fetchRemoteOKJobs() {
-  try {
-    const parser = new Parser({
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://remoteok.com/'
-      }
-    });
-    const feed = await parser.parseURL('https://remoteok.com/remote-dev-jobs.rss');
-
-    return feed.items.map(item => ({
-      id: `remoteok_${item.guid}`,
-      title: item.title,
-      company: item.author || 'Unknown',
-      location: 'Remote',
-      type: 'Full-time',
-      salary: null,
-      url: item.link,
-      description: item.contentSnippet || item.content || '',
-      publishedAt: item.pubDate,
-      source: 'RemoteOK'
-    }));
-  } catch (error) {
-    console.error('Error fetching RemoteOK jobs:', error.message);
-    return [];
-  }
-}
 
 // Fetch jobs from We Work Remotely RSS
 async function fetchWeWorkRemotelyJobs() {
@@ -538,7 +476,7 @@ function filterJobs(jobs) {
       return false;
     }
 
-    // Check for exclude keywords first
+    // Check for exclude keywords first (check Title + Description + Company)
     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(keyword =>
       combinedText.includes(keyword.toLowerCase())
     );
@@ -546,10 +484,11 @@ function filterJobs(jobs) {
       return false;
     }
 
-    // Must match at least one STRONG technical keyword
-    // This filters out generic "Intern" or "Manager" roles that don't specify "Switch" or "Software" etc.
+    // Must match at least one STRONG technical keyword in the TITLE
+    // We restrict this to TITLE ONLY to avoid false positives where a "Content Intern" 
+    // description mentions "working with software team".
     const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some(keyword =>
-      combinedText.includes(keyword.toLowerCase())
+      titleLower.includes(keyword.toLowerCase())
     );
 
     return hasTechnicalKeyword;
@@ -667,16 +606,14 @@ async function fetchAndPostJobs() {
 
   try {
     // Fetch from all sources
-    const [remotiveJobs, arbeitnowJobs, remoteokJobs, weworkremotelyJobs, unstopJobs] = await Promise.all([
+    const [remotiveJobs, weworkremotelyJobs, unstopJobs] = await Promise.all([
       fetchRemotiveJobs(),
-      fetchArbeitnowJobs(),
-      fetchRemoteOKJobs(),
       fetchWeWorkRemotelyJobs(),
       fetchUnstopJobs()
     ]);
 
     // Combine and filter
-    const allJobs = [...remotiveJobs, ...arbeitnowJobs, ...remoteokJobs, ...weworkremotelyJobs, ...unstopJobs];
+    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs];
     const newJobs = filterJobs(allJobs);
 
     console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);
