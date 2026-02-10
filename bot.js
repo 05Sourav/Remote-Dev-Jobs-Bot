@@ -506,27 +506,79 @@ function filterJobs(jobs) {
 
 // Format job message for Telegram
 function formatJobMessage(job, priority = 0) {
-  const emoji = getJobEmoji(job.title.toLowerCase());
-  const priorityBadge = priority >= 90 ? '🔥 ' : priority >= 70 ? '⭐ ' : '';
+  const emoji = getJobEmoji(job);
+  const hotBadge = priority >= 50 ? '🔥 HOT ' : '';
+  const salaryText = job.salary ? job.salary.trim() : 'Not disclosed';
 
-  let message = `${priorityBadge}${emoji} <b>${job.title}</b>\n\n`;
-  message += `🏢 <b>Company:</b> ${job.company}\n`;
-  message += `📍 <b>Location:</b> ${job.location}\n`;
-  message += `💼 <b>Type:</b> ${job.type}\n`;
+  // Generate hashtags
+  const hashtags = generateHashtags(job);
 
-  if (job.salary) {
-    message += `💰 <b>Salary:</b> ${job.salary}\n`;
-  }
+  return `${hotBadge}${emoji} <b>${job.title}</b>
 
-  message += `🔗 <b>Apply:</b> ${job.url}\n`;
-  message += `\n<i>Source: ${job.source}</i>`;
+🏢 <b>Company:</b> ${job.company}
+📍 <b>Location:</b> ${job.location}
+💼 <b>Type:</b> ${job.type}
+💰 <b>Salary:</b> ${salaryText}
 
-  return message;
+🔗 <a href="${job.url}">Apply Here</a>
+
+<i>Via ${job.source}</i>
+
+${hashtags}`;
 }
 
-// Get emoji based on job type
-function getJobEmoji(title) {
-  if (title.includes('frontend') || title.includes('front-end') || title.includes('react') || title.includes('vue') || title.includes('angular')) return '🎨';
+// Generate hashtags based on job details
+function generateHashtags(job) {
+  const tags = ['#RemoteJobs', '#DeveloperJobs'];
+  const searchText = `${job.title} ${job.description || ''}`.toLowerCase();
+
+  // Job level tags
+  if (searchText.includes('intern')) {
+    tags.push('#Internships', '#EntryLevel');
+  } else if (searchText.includes('junior') || searchText.includes('trainee') || searchText.includes('entry')) {
+    tags.push('#JuniorDev', '#CareerStart');
+  } else if (searchText.includes('senior') || searchText.includes('lead')) {
+    tags.push('#SeniorDev', '#Experienced');
+  }
+
+  // Technology tags
+  const techTags = {
+    'python': '#Python',
+    'javascript': '#JavaScript',
+    'typescript': '#TypeScript',
+    'react': '#React',
+    'node': '#NodeJS',
+    'java': '#Java',
+    'golang': '#Golang',
+    'rust': '#Rust',
+    'devops': '#DevOps',
+    'frontend': '#Frontend',
+    'backend': '#Backend',
+    'fullstack': '#FullStack',
+    'full stack': '#FullStack',
+    'mobile': '#Mobile',
+    'android': '#Android',
+    'ios': '#iOS'
+  };
+
+  for (const [keyword, tag] of Object.entries(techTags)) {
+    if (searchText.includes(keyword) && !tags.includes(tag)) {
+      tags.push(tag);
+      if (tags.length >= 8) break; // Limit to 8 tags total
+    }
+  }
+
+  return tags.join(' ');
+}
+
+// Get appropriate emoji based on job type/title
+function getJobEmoji(job) {
+  const title = job.title.toLowerCase();
+
+  if (title.includes('intern')) return '🎓';
+  if (title.includes('junior') || title.includes('trainee')) return '🌱';
+  if (title.includes('senior')) return '🚀';
+  if (title.includes('frontend')) return '🎨';
   if (title.includes('backend')) return '⚙️';
   if (title.includes('full stack') || title.includes('fullstack')) return '🔄';
   if (title.includes('mobile')) return '📱';
