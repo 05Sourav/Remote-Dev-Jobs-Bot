@@ -19,46 +19,44 @@ const config = {
   port: parseInt(process.env.PORT || '3000'), // For Render health checks
 };
 
-// Job keywords to filter - Software Engineering roles
-const JOB_KEYWORDS = [
-  // Core roles
+// Strong technical keywords - REQUIRED for job acceptance
+const TECHNICAL_KEYWORDS = [
+  // Core roles (must have one of these)
   'developer', 'engineer', 'programmer', 'coder', 'software',
 
   // Specializations
   'frontend', 'backend', 'full stack', 'fullstack', 'full-stack',
-  'mobile', 'android', 'ios', 'web', 'embedded', 'firmware',
+  'mobile', 'android', 'ios', 'web developer', 'embedded', 'firmware',
 
   // SDE variations
   'sde', 'sde1', 'sde2', 'sde3', 'sde-1', 'sde-2', 'sde-3', 'sde 1', 'sde 2',
 
-  // Entry-level
-  'intern', 'internship', 'junior', 'trainee', 'graduate', 'fresher',
+  // Specific engineering roles
+  'devops', 'devsecops', 'sre', 'site reliability',
+  'data engineer', 'ml engineer', 'machine learning engineer', 'ai engineer',
+  'cloud engineer', 'platform engineer', 'systems engineer',
+  'infrastructure engineer', 'security engineer',
+  'blockchain developer', 'web3 developer',
 
-  // Languages & Frameworks
+  // QA/Testing (technical)
+  'qa engineer', 'qa automation', 'test engineer', 'sdet',
+  'automation engineer', 'test automation',
+
+  // Explicit technical terms
+  'software development', 'software engineering', 'application developer',
+  'app developer', 'game developer',
+
+  // Languages & Frameworks (Accepted as technical keywords)
   'react', 'angular', 'vue', 'node', 'nodejs', 'express',
   'python', 'django', 'flask', 'java', 'spring', 'kotlin',
   'javascript', 'typescript', 'c++', 'golang', 'rust', 'ruby', 'rails',
   'php', 'laravel', 'dotnet', '.net', 'c#', 'swift', 'flutter',
 
-  // Specializations
-  'devops', 'devsecops', 'sre', 'site reliability',
-  'data engineer', 'ml engineer', 'machine learning', 'ai engineer',
-  'cloud engineer', 'platform engineer', 'systems engineer',
-  'infrastructure engineer', 'network engineer', 'security engineer',
-  'blockchain', 'smart contract', 'solidity', 'web3',
-
-  // Technologies
+  // Technologies (Accepted as technical keywords)
   'api', 'rest', 'graphql', 'microservices', 'kubernetes', 'docker',
   'aws', 'azure', 'gcp', 'cloud', 'serverless',
   'database', 'sql', 'nosql', 'mongodb', 'postgresql', 'redis',
-
-  // QA/Testing
-  'qa engineer', 'qa automation', 'test engineer', 'sdet',
-  'quality assurance', 'automation engineer', 'test automation',
-
-  // General tech terms
-  'coding', 'programming', 'software development', 'software engineering',
-  'application developer', 'app developer', 'game developer'
+  'blockchain', 'smart contract', 'solidity', 'web3'
 ];
 
 // Exclude non-technical roles
@@ -67,10 +65,12 @@ const EXCLUDE_KEYWORDS = [
   'writer', 'content writer', 'content creator', 'copywriter', 'editor',
   'marketing', 'seo', 'sem', 'social media', 'brand manager',
   'influencer', 'blogger', 'journalist',
+  'marketing intern', 'marketing internship',
 
   // Sales & Business
   'sales', 'account executive', 'business development', 'sales representative',
   'account manager', 'relationship manager',
+  'business development intern', 'sales intern',
 
   // Design (non-engineering)
   'graphic designer', 'ui/ux designer', 'ux designer', 'ui designer',
@@ -90,6 +90,7 @@ const EXCLUDE_KEYWORDS = [
   // HR & Recruiting
   'recruiter', 'talent acquisition', 'hr', 'human resources',
   'hr manager', 'people operations', 'talent partner',
+  'hr intern', 'hr internship',
 
   // Finance & Legal
   'accountant', 'bookkeeper', 'financial analyst', 'finance',
@@ -105,6 +106,12 @@ const EXCLUDE_KEYWORDS = [
   // Data annotation/labeling
   'rater', 'annotator', 'labeler', 'data labeling', 'data annotation',
   'moderator', 'reviewer', 'evaluator',
+
+  // Campus & Events (NEW - high priority exclusions)
+  'ambassador', 'campus ambassador', 'student ambassador', 'brand ambassador',
+  'career fair', 'job fair', 'hiring event', 'recruitment event',
+  'event', 'competition', 'hackathon organizer', 'campus representative',
+  'fellowship', 'campus program', 'student program',
 
   // Other
   'community manager', 'event coordinator', 'trainer', 'instructor',
@@ -224,8 +231,12 @@ async function savePostedJobs() {
 // Fetch jobs from Remotive API
 async function fetchRemotiveJobs() {
   try {
+    // Use category filtering at API level for software development jobs only
     const response = await axios.get('https://remotive.com/api/remote-jobs', {
-      params: { limit: 50 },
+      params: {
+        limit: 50,
+        category: 'software-dev' // API-level filtering for software development
+      },
       timeout: 10000
     });
 
@@ -392,8 +403,47 @@ async function fetchUnstopJobs() {
 
     console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
 
+    // Allowed technical domains for Unstop
+    const ALLOWED_DOMAINS = [
+      'engineering', 'software development', 'it', 'computer science',
+      'web development', 'mobile development', 'data engineering',
+      'ai/ml', 'artificial intelligence', 'machine learning',
+      'technology', 'software', 'programming', 'coding',
+      'devops', 'cloud computing', 'cybersecurity', 'information technology'
+    ];
+
+    const REJECTED_DOMAINS = [
+      'marketing', 'business', 'hr', 'human resources', 'operations',
+      'campus ambassador', 'sales', 'general management', 'event',
+      'competition', 'finance', 'consulting', 'content', 'design'
+    ];
+
+    // Filter by domain before transformation
+    const technicalOpportunities = allOpportunities.filter(job => {
+      const domain = (job.domain || '').toLowerCase();
+      const tags = (job.tags || []).map(t => t.toLowerCase());
+      const combinedDomainText = `${domain} ${tags.join(' ')}`;
+
+      // Reject if matches rejected domains
+      const hasRejectedDomain = REJECTED_DOMAINS.some(rejected =>
+        combinedDomainText.includes(rejected)
+      );
+      if (hasRejectedDomain) {
+        return false;
+      }
+
+      // Accept if matches allowed domains
+      const hasAllowedDomain = ALLOWED_DOMAINS.some(allowed =>
+        combinedDomainText.includes(allowed)
+      );
+
+      return hasAllowedDomain;
+    });
+
+    console.log(`🎯 Filtered to ${technicalOpportunities.length} technical opportunities from Unstop`);
+
     // Transform to standard format
-    return allOpportunities.map(job => {
+    return technicalOpportunities.map(job => {
       // Extract location from locations array
       const locations = job.locations || [];
       const locationStr = locations.map(loc => loc.city).filter(Boolean).join(', ') || 'Remote';
@@ -530,12 +580,13 @@ function filterJobs(jobs) {
       return false;
     }
 
-    // Must match at least one job keyword
-    const hasJobKeyword = JOB_KEYWORDS.some(keyword =>
+    // Must match at least one STRONG technical keyword
+    // This filters out generic "Intern" or "Manager" roles that don't specify "Switch" or "Software" etc.
+    const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some(keyword =>
       combinedText.includes(keyword.toLowerCase())
     );
 
-    return hasJobKeyword;
+    return hasTechnicalKeyword;
   });
 }
 
