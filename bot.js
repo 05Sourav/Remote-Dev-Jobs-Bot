@@ -328,44 +328,61 @@ async function fetchWeWorkRemotelyJobs() {
 // Fetch jobs from Unstop API
 async function fetchUnstopJobs() {
   try {
-    console.log('🔍 Fetching jobs from Unstop...');
+    console.log('🔍 Fetching jobs and internships from Unstop...');
 
-    const response = await axios.get('https://unstop.com/api/public/opportunity/search-result', {
-      params: {
-        opportunity: 'jobs',
-        page: 1,
-        per_page: 50,
-        sortBy: '',
-        orderBy: '',
-        filter_condition: ''
-      },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-        'Referer': 'https://unstop.com/jobs'
-      }
-    });
+    // Fetch both jobs and internships in parallel
+    const [jobsResponse, internshipsResponse] = await Promise.all([
+      // Fetch jobs
+      axios.get('https://unstop.com/api/public/opportunity/search-result', {
+        params: {
+          opportunity: 'jobs',
+          page: 1,
+          per_page: 50,
+          sortBy: '',
+          orderBy: '',
+          filter_condition: ''
+        },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+          'Referer': 'https://unstop.com/jobs'
+        },
+        timeout: 10000
+      }),
+      // Fetch internships
+      axios.get('https://unstop.com/api/public/opportunity/search-result', {
+        params: {
+          opportunity: 'internships',
+          page: 1,
+          per_page: 50,
+          sortBy: '',
+          orderBy: '',
+          filter_condition: ''
+        },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+          'Referer': 'https://unstop.com/internships'
+        },
+        timeout: 10000
+      })
+    ]);
 
-    const jobs = response.data?.data?.data || [];
+    const jobs = jobsResponse.data?.data?.data || [];
+    const internships = internshipsResponse.data?.data?.data || [];
+    const allOpportunities = [...jobs, ...internships];
 
-    // Filter to only include jobs and internships (exclude competitions, hackathons, etc.)
-    const filteredJobs = jobs.filter(job => {
-      const isJob = job.type === 'jobs';
-      const isInternship = job.subtype === 'internship';
-      return isJob || isInternship;
-    });
-
-    console.log(`✅ Fetched ${filteredJobs.length} jobs/internships from Unstop (filtered from ${jobs.length} total opportunities)`);
+    console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
 
     // Transform to standard format
-    return filteredJobs.map(job => {
+    return allOpportunities.map(job => {
       // Extract location from locations array
       const locations = job.locations || [];
       const locationStr = locations.map(loc => loc.city).filter(Boolean).join(', ') || 'Remote';
 
       // Determine job type
       let jobType = 'Full-time';
-      if (job.subtype === 'internship') {
+      if (job.type === 'internships' || job.subtype === 'internship') {
         jobType = 'Internship';
       } else if (job.jobDetail?.timing) {
         const timing = job.jobDetail.timing;
