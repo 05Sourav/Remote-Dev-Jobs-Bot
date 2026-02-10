@@ -407,16 +407,22 @@ function calculateJobPriority(job) {
   const combinedText = `${titleLower} ${descLower}`;
   let score = 50; // Base score
 
-  // Check for priority keywords (entry-level indicators) - MODERATE BOOST (Reduced from 40 to 20)
+  // Check for priority keywords (entry-level indicators) - SMALL BOOST (Reduced to 15)
   const hasPriorityKeyword = PRIORITY_KEYWORDS.some(keyword => combinedText.includes(keyword));
-  if (hasPriorityKeyword) {
-    score += 20;
+  const isInternship = hasPriorityKeyword;
+  if (isInternship) {
+    score += 15;
+  }
+
+  // Bonus for Full-Time roles (Non-Internship)
+  if (!isInternship) {
+    score += 10;
   }
 
   // Check for global remote keywords - ADDITIONAL BOOST
   const hasGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some(keyword => combinedText.includes(keyword));
-  if (hasGlobalRemote) {
-    score += 20;
+  if (hasGlobalRemote || job.location.toLowerCase().includes('remote')) {
+    score += 10;
   }
 
   // Penalize senior/lead positions heavily
@@ -453,11 +459,21 @@ function calculateJobPriority(job) {
   // Bonus for popular tech stacks
   const techStackBonus = [
     'react', 'node', 'python', 'javascript', 'typescript',
-    'aws', 'docker', 'kubernetes'
+    'aws', 'docker', 'kubernetes',
+    // Backend & Frameworks
+    'java', 'spring', 'spring boot', 'golang', 'fastapi', 'express', 'nestjs', 'dotnet', 'c#',
+    // Frontend
+    'nextjs', 'next.js', 'angular', 'vue',
+    // Databases
+    'postgresql', 'mysql', 'redis',
+    // Architecture & APIs
+    'graphql', 'microservices', 'rest api',
+    // Mobile
+    'flutter', 'kotlin', 'swift', 'react native'
   ];
 
   const techMatches = techStackBonus.filter(tech => combinedText.includes(tech)).length;
-  score += techMatches * 5;
+  score += techMatches * 7;
 
   return Math.max(0, score); // Ensure score doesn't go negative
 }
