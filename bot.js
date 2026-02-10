@@ -882,7 +882,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, '0.0.0.0', () => {
   console.log(`🌐 Health check server running on port ${config.port}`);
 });
 
