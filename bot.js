@@ -1,0 +1,795 @@
+﻿// Load environment variables from .env file
+require('dotenv').config();
+
+const TelegramBot = require('node-telegram-bot-api');
+const cron = require('node-cron');
+const axios = require('axios');
+const Parser = require('rss-parser');
+const fs = require('fs').promises;
+const path = require('path');
+
+// Configuration
+const config = {
+  botToken: process.env.TELEGRAM_BOT_TOKEN,
+  channelId: process.env.TELEGRAM_CHANNEL_ID,
+  adminId: process.env.ADMIN_TELEGRAM_ID,
+  postsPerBatch: parseInt(process.env.POSTS_PER_BATCH || '5'),
+  cronSchedule: process.env.CRON_SCHEDULE || '0 */3 * * *', // Every 3 hours by default
+};
+
+// Job keywords to filter - Software Engineering roles
+const JOB_KEYWORDS = [
+  // Core roles
+  'developer', 'engineer', 'programmer', 'coder', 'software',
+
+  // Specializations
+  'frontend', 'backend', 'full stack', 'fullstack', 'full-stack',
+  'mobile', 'android', 'ios', 'web', 'embedded', 'firmware',
+
+  // SDE variations
+  'sde', 'sde1', 'sde2', 'sde3', 'sde-1', 'sde-2', 'sde-3', 'sde 1', 'sde 2',
+
+  // Entry-level
+  'intern', 'internship', 'junior', 'trainee', 'graduate', 'fresher',
+
+  // Languages & Frameworks
+  'react', 'angular', 'vue', 'node', 'nodejs', 'express',
+  'python', 'django', 'flask', 'java', 'spring', 'kotlin',
+  'javascript', 'typescript', 'c++', 'golang', 'rust', 'ruby', 'rails',
+  'php', 'laravel', 'dotnet', '.net', 'c#', 'swift', 'flutter',
+
+  // Specializations
+  'devops', 'devsecops', 'sre', 'site reliability',
+  'data engineer', 'ml engineer', 'machine learning', 'ai engineer',
+  'cloud engineer', 'platform engineer', 'systems engineer',
+  'infrastructure engineer', 'network engineer', 'security engineer',
+  'blockchain', 'smart contract', 'solidity', 'web3',
+
+  // Technologies
+  'api', 'rest', 'graphql', 'microservices', 'kubernetes', 'docker',
+  'aws', 'azure', 'gcp', 'cloud', 'serverless',
+  'database', 'sql', 'nosql', 'mongodb', 'postgresql', 'redis',
+
+  // QA/Testing
+  'qa engineer', 'qa automation', 'test engineer', 'sdet',
+  'quality assurance', 'automation engineer', 'test automation',
+
+  // General tech terms
+  'coding', 'programming', 'software development', 'software engineering',
+  'application developer', 'app developer', 'game developer'
+];
+
+// Exclude non-technical roles
+const EXCLUDE_KEYWORDS = [
+  // Content & Marketing
+  'writer', 'content writer', 'content creator', 'copywriter', 'editor',
+  'marketing', 'seo', 'sem', 'social media', 'brand manager',
+  'influencer', 'blogger', 'journalist',
+
+  // Sales & Business
+  'sales', 'account executive', 'business development', 'sales representative',
+  'account manager', 'relationship manager',
+
+  // Design (non-engineering)
+  'graphic designer', 'ui/ux designer', 'ux designer', 'ui designer',
+  'visual designer', 'illustrator', 'animator', 'video editor',
+  'product designer',
+
+  // Management (non-technical)
+  'product manager', 'project manager', 'program manager', 'portfolio manager',
+  'operations manager', 'general manager', 'office manager',
+  'scrum master', 'agile coach', 'delivery manager',
+
+  // Support & Admin
+  'customer support', 'customer service', 'customer success',
+  'technical support', 'help desk', 'support specialist',
+  'data entry', 'administrative', 'receptionist', 'assistant',
+
+  // HR & Recruiting
+  'recruiter', 'talent acquisition', 'hr', 'human resources',
+  'hr manager', 'people operations', 'talent partner',
+
+  // Finance & Legal
+  'accountant', 'bookkeeper', 'financial analyst', 'finance',
+  'controller', 'treasurer', 'auditor', 'audit', 'compliance',
+  'legal', 'lawyer', 'attorney', 'paralegal',
+
+  // Analysis (non-technical)
+  'business analyst', 'data analyst', 'market research',
+  'strategy analyst', 'consultant', 'advisor',
+
+  // Data annotation/labeling
+  'rater', 'annotator', 'labeler', 'data labeling', 'data annotation',
+  'moderator', 'reviewer', 'evaluator',
+
+  // Other
+  'community manager', 'event coordinator', 'trainer', 'instructor',
+  'teacher', 'tutor', 'coach'
+];
+
+// Priority keywords for entry-level roles
+const PRIORITY_KEYWORDS = [
+  'internship',
+  'intern',
+  'junior',
+  'trainee',
+  'entry level',
+  'entry-level',
+  'graduate',
+  'fresher',
+  'new grad',
+  'sde1',
+  'sde-1',
+  'sde 1',
+  'associate',
+  'early career',
+  '0-1 years',
+  '0-2 years',
+  'campus'
+];
+
+// Location-restricted keywords to exclude
+const LOCATION_RESTRICTED_KEYWORDS = [
+  // Germany-specific
+  'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'cologne',
+  'deutschsprachig', 'deutsch', 'german language',
+
+  // EU-specific
+  'europe only', 'eu only', 'european union', 'eu citizens',
+  'eu member states', 'schengen',
+
+  // Other location restrictions
+  'us only', 'usa only', 'uk only', 'must be located',
+  'must be based', 'visa sponsorship required', 'work permit required',
+  'must reside', 'local candidates only'
+];
+
+// Language-specific patterns and keywords (non-English job markers)
+const LANGUAGE_PATTERNS = [
+  // German patterns
+  '(m/w/d)', '(w/m/d)', '(m/f/d)', '(gn)', '(m/w/x)',
+
+  // French patterns and keywords
+  'développeur', 'développeuse', 'ingénieur', 'ingénieure',
+  'français requis', 'maîtrise du français', 'parlant français',
+
+  // Spanish patterns and keywords
+  'desarrollador', 'desarrolladora', 'ingeniero', 'ingeniera',
+  'español requerido', 'dominio del español', 'hablante de español',
+
+  // Portuguese patterns and keywords
+  'desenvolvedor', 'desenvolvedora', 'engenheiro', 'engenheira',
+  'português obrigatório', 'fluente em português',
+
+  // Italian patterns and keywords
+  'sviluppatore', 'sviluppatrice', 'ingegnere',
+  'italiano richiesto', 'madrelingua italiana',
+
+  // Dutch patterns and keywords
+  'ontwikkelaar', 'nederlandstalig', 'nederlands vereist',
+
+  // Polish patterns and keywords
+  'programista', 'inżynier', 'język polski wymagany',
+
+  // General non-English indicators
+  'native speaker required', 'mother tongue', 'madrelingua',
+  'langue maternelle', 'lengua materna'
+];
+
+// Global remote indicators for priority boost
+const GLOBAL_REMOTE_KEYWORDS = [
+  'worldwide', 'anywhere', 'global', 'remote-first',
+  'location independent', 'work from anywhere', 'any timezone',
+  'international', 'globally distributed'
+];
+
+
+// Initialize bot
+const bot = new TelegramBot(config.botToken, { polling: true });
+
+// Storage for posted jobs (to prevent duplicates)
+const STORAGE_FILE = path.join(__dirname, 'posted_jobs.json');
+let postedJobs = new Set();
+
+// Load posted jobs from file
+async function loadPostedJobs() {
+  try {
+    const data = await fs.readFile(STORAGE_FILE, 'utf8');
+    postedJobs = new Set(JSON.parse(data));
+    console.log(`Loaded ${postedJobs.size} posted job IDs`);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.log('No previous job history found, starting fresh');
+      postedJobs = new Set();
+    } else {
+      console.error('Error loading posted jobs:', error);
+    }
+  }
+}
+
+// Save posted jobs to file
+async function savePostedJobs() {
+  try {
+    await fs.writeFile(STORAGE_FILE, JSON.stringify([...postedJobs]), 'utf8');
+    console.log(`Saved ${postedJobs.size} posted job IDs`);
+  } catch (error) {
+    console.error('Error saving posted jobs:', error);
+  }
+}
+
+// Fetch jobs from Remotive API
+async function fetchRemotiveJobs() {
+  try {
+    const response = await axios.get('https://remotive.com/api/remote-jobs', {
+      params: { limit: 50 },
+      timeout: 10000
+    });
+
+    return response.data.jobs.map(job => ({
+      id: `remotive_${job.id}`,
+      title: job.title,
+      company: job.company_name,
+      location: 'Remote',
+      type: job.job_type || 'Full-time',
+      salary: job.salary || null,
+      url: job.url,
+      description: job.description,
+      publishedAt: job.publication_date,
+      source: 'Remotive'
+    }));
+  } catch (error) {
+    console.error('Error fetching Remotive jobs:', error.message);
+    return [];
+  }
+}
+
+// Fetch jobs from Arbeitnow API
+async function fetchArbeitnowJobs() {
+  try {
+    const response = await axios.get('https://www.arbeitnow.com/api/job-board-api', {
+      timeout: 10000
+    });
+
+    return response.data.data
+      .filter(job => job.remote === true)
+      .map(job => ({
+        id: `arbeitnow_${job.slug}`,
+        title: job.title,
+        company: job.company_name,
+        location: 'Remote',
+        type: 'Full-time',
+        salary: null,
+        url: job.url,
+        description: job.description,
+        publishedAt: job.created_at,
+        source: 'Arbeitnow'
+      }));
+  } catch (error) {
+    console.error('Error fetching Arbeitnow jobs:', error.message);
+    return [];
+  }
+}
+
+// Fetch jobs from Remote OK RSS
+async function fetchRemoteOKJobs() {
+  try {
+    const parser = new Parser();
+    const feed = await parser.parseURL('https://remoteok.com/remote-dev-jobs.rss');
+
+    return feed.items.map(item => ({
+      id: `remoteok_${item.guid}`,
+      title: item.title,
+      company: item.author || 'Unknown',
+      location: 'Remote',
+      type: 'Full-time',
+      salary: null,
+      url: item.link,
+      description: item.contentSnippet || item.content || '',
+      publishedAt: item.pubDate,
+      source: 'RemoteOK'
+    }));
+  } catch (error) {
+    console.error('Error fetching RemoteOK jobs:', error.message);
+    return [];
+  }
+}
+
+// Fetch jobs from We Work Remotely RSS
+async function fetchWeWorkRemotelyJobs() {
+  try {
+    const parser = new Parser();
+    const feed = await parser.parseURL('https://weworkremotely.com/categories/remote-programming-jobs.rss');
+
+    return feed.items.map(item => {
+      // Extract company from title (format: "Company: Job Title")
+      const titleParts = item.title.split(':');
+      const company = titleParts.length > 1 ? titleParts[0].trim() : 'Unknown';
+      const title = titleParts.length > 1 ? titleParts.slice(1).join(':').trim() : item.title;
+
+      return {
+        id: `weworkremotely_${item.guid}`,
+        title,
+        company,
+        location: 'Remote',
+        type: 'Full-time',
+        salary: null,
+        url: item.link,
+        description: item.contentSnippet || item.content || '',
+        publishedAt: item.pubDate,
+        source: 'WeWorkRemotely'
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching WeWorkRemotely jobs:', error.message);
+    return [];
+  }
+}
+
+// Fetch jobs from Unstop API
+async function fetchUnstopJobs() {
+  try {
+    console.log('🔍 Fetching jobs from Unstop...');
+
+    const response = await axios.get('https://unstop.com/api/public/opportunity/search-result', {
+      params: {
+        opportunity: 'jobs',
+        page: 1,
+        per_page: 50,
+        sortBy: '',
+        orderBy: '',
+        filter_condition: ''
+      },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Referer': 'https://unstop.com/jobs'
+      }
+    });
+
+    const jobs = response.data?.data?.data || [];
+
+    // Filter to only include jobs and internships (exclude competitions, hackathons, etc.)
+    const filteredJobs = jobs.filter(job => {
+      const isJob = job.type === 'jobs';
+      const isInternship = job.subtype === 'internship';
+      return isJob || isInternship;
+    });
+
+    console.log(`✅ Fetched ${filteredJobs.length} jobs/internships from Unstop (filtered from ${jobs.length} total opportunities)`);
+
+    // Transform to standard format
+    return filteredJobs.map(job => {
+      // Extract location from locations array
+      const locations = job.locations || [];
+      const locationStr = locations.map(loc => loc.city).filter(Boolean).join(', ') || 'Remote';
+
+      // Determine job type
+      let jobType = 'Full-time';
+      if (job.subtype === 'internship') {
+        jobType = 'Internship';
+      } else if (job.jobDetail?.timing) {
+        const timing = job.jobDetail.timing;
+        if (timing === 'full_time') jobType = 'Full-time';
+        else if (timing === 'part_time') jobType = 'Part-time';
+        else if (timing === 'contract') jobType = 'Contract';
+      }
+
+      // Extract salary if available
+      let salary = null;
+      if (job.jobDetail?.show_salary && job.jobDetail?.min_salary) {
+        const min = job.jobDetail.min_salary;
+        const max = job.jobDetail.max_salary;
+        const currency = job.jobDetail.currency === 'fa-rupee' ? '₹' : '$';
+        const payIn = job.jobDetail.pay_in || 'monthly';
+
+        if (max) {
+          salary = `${currency}${min}-${max}/${payIn}`;
+        } else {
+          salary = `${currency}${min}/${payIn}`;
+        }
+      }
+
+      // Strip HTML from description
+      const description = job.details ? job.details.replace(/<[^>]*>/g, '').substring(0, 500) : job.title;
+
+      return {
+        id: `unstop_${job.id}`,
+        title: job.title,
+        company: job.organisation?.name || 'Unknown Company',
+        location: locationStr,
+        type: jobType,
+        salary: salary,
+        url: `https://unstop.com/${job.public_url}`,
+        description: description,
+        publishedAt: job.updated_at || new Date().toISOString(),
+        source: 'Unstop'
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching Unstop jobs:', error.message);
+    return [];
+  }
+}
+
+// Calculate job priority score
+function calculateJobPriority(job) {
+  const titleLower = job.title.toLowerCase();
+  const descLower = (job.description || '').toLowerCase();
+  const combinedText = `${titleLower} ${descLower}`;
+  let score = 50; // Base score
+
+  // Check for priority keywords (entry-level indicators) - MAJOR BOOST
+  const hasPriorityKeyword = PRIORITY_KEYWORDS.some(keyword => combinedText.includes(keyword));
+  if (hasPriorityKeyword) {
+    score += 40;
+  }
+
+  // Check for global remote keywords - ADDITIONAL BOOST
+  const hasGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some(keyword => combinedText.includes(keyword));
+  if (hasGlobalRemote) {
+    score += 20;
+  }
+
+  // Penalize senior/lead positions heavily
+  const seniorityPenaltyKeywords = [
+    'senior', 'sr.', 'lead', 'principal', 'staff', 'architect',
+    'director', 'head of', 'vp', 'vice president', 'chief',
+    'expert', '5+ years', '5 years', '6+ years', '7+ years', '8+ years',
+    'experienced', 'seasoned'
+  ];
+
+  for (const keyword of seniorityPenaltyKeywords) {
+    if (combinedText.includes(keyword)) {
+      score -= 40;
+      break; // Apply penalty once
+    }
+  }
+
+  // Penalize location-restricted jobs
+  const hasLocationRestriction = LOCATION_RESTRICTED_KEYWORDS.some(keyword =>
+    combinedText.includes(keyword)
+  );
+  if (hasLocationRestriction) {
+    score -= 30;
+  }
+
+  // Penalize non-English job postings
+  const hasLanguageRestriction = LANGUAGE_PATTERNS.some(pattern =>
+    combinedText.includes(pattern.toLowerCase())
+  );
+  if (hasLanguageRestriction) {
+    score -= 35;
+  }
+
+  // Bonus for popular tech stacks
+  const techStackBonus = [
+    'react', 'node', 'python', 'javascript', 'typescript',
+    'aws', 'docker', 'kubernetes'
+  ];
+
+  const techMatches = techStackBonus.filter(tech => combinedText.includes(tech)).length;
+  score += techMatches * 5;
+
+  return Math.max(0, score); // Ensure score doesn't go negative
+}
+
+// Filter jobs based on keywords
+function filterJobs(jobs) {
+  return jobs.filter(job => {
+    const titleLower = job.title.toLowerCase();
+    const descLower = (job.description || '').toLowerCase();
+    const companyLower = (job.company || '').toLowerCase();
+    const combinedText = `${titleLower} ${descLower} ${companyLower}`;
+
+    // Skip if already posted (check both ID and composite key)
+    const compositeKey = `${job.id}|${job.url}`;
+    if (postedJobs.has(job.id) || postedJobs.has(compositeKey)) {
+      return false;
+    }
+
+    // Check for exclude keywords first
+    const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(keyword =>
+      combinedText.includes(keyword.toLowerCase())
+    );
+    if (hasExcludeKeyword) {
+      return false;
+    }
+
+    // Must match at least one job keyword
+    const hasJobKeyword = JOB_KEYWORDS.some(keyword =>
+      combinedText.includes(keyword.toLowerCase())
+    );
+
+    return hasJobKeyword;
+  });
+}
+
+// Format job message for Telegram
+function formatJobMessage(job, priority = 0) {
+  const emoji = getJobEmoji(job.title.toLowerCase());
+  const priorityBadge = priority >= 90 ? '🔥 ' : priority >= 70 ? '⭐ ' : '';
+
+  let message = `${priorityBadge}${emoji} <b>${job.title}</b>\n\n`;
+  message += `🏢 <b>Company:</b> ${job.company}\n`;
+  message += `📍 <b>Location:</b> ${job.location}\n`;
+  message += `💼 <b>Type:</b> ${job.type}\n`;
+
+  if (job.salary) {
+    message += `💰 <b>Salary:</b> ${job.salary}\n`;
+  }
+
+  message += `🔗 <b>Apply:</b> ${job.url}\n`;
+  message += `\n<i>Source: ${job.source}</i>`;
+
+  return message;
+}
+
+// Get emoji based on job type
+function getJobEmoji(title) {
+  if (title.includes('frontend') || title.includes('front-end') || title.includes('react') || title.includes('vue') || title.includes('angular')) return '🎨';
+  if (title.includes('backend')) return '⚙️';
+  if (title.includes('full stack') || title.includes('fullstack')) return '🔄';
+  if (title.includes('mobile')) return '📱';
+  if (title.includes('devops')) return '🔧';
+  return '💻';
+}
+
+// Post job to Telegram channel
+async function postJobToChannel(job, priority = 0) {
+  try {
+    const message = formatJobMessage(job, priority);
+    await bot.sendMessage(config.channelId, message, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    });
+
+    // Mark as posted (both ID and composite key)
+    const compositeKey = `${job.id}|${job.url}`;
+    postedJobs.add(job.id);
+    postedJobs.add(compositeKey);
+    await savePostedJobs();
+
+    console.log(`✅ Posted: ${job.title} at ${job.company} (Priority: ${priority})`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Error posting job ${job.id}:`, error.message);
+    return false;
+  }
+}
+
+// Main job fetching and posting function
+async function fetchAndPostJobs() {
+  console.log('\n🔍 Starting job fetch cycle...');
+
+  try {
+    // Fetch from all sources
+    const [remotiveJobs, arbeitnowJobs, remoteokJobs, weworkremotelyJobs, unstopJobs] = await Promise.all([
+      fetchRemotiveJobs(),
+      fetchArbeitnowJobs(),
+      fetchRemoteOKJobs(),
+      fetchWeWorkRemotelyJobs(),
+      fetchUnstopJobs()
+    ]);
+
+    // Combine and filter
+    const allJobs = [...remotiveJobs, ...arbeitnowJobs, ...remoteokJobs, ...weworkremotelyJobs, ...unstopJobs];
+    const newJobs = filterJobs(allJobs);
+
+    console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);
+
+    if (newJobs.length === 0) {
+      console.log('No new jobs to post');
+      return;
+    }
+
+    // Calculate priority for each job
+    const jobsWithPriority = newJobs.map(job => ({
+      ...job,
+      priority: calculateJobPriority(job)
+    }));
+
+    // Filter out jobs with very low priority (typically senior roles)
+    const MIN_PRIORITY_THRESHOLD = 10;
+    const qualifiedJobs = jobsWithPriority.filter(job => job.priority >= MIN_PRIORITY_THRESHOLD);
+
+    console.log(`🎯 ${qualifiedJobs.length} jobs meet priority threshold (>=${MIN_PRIORITY_THRESHOLD})`);
+
+    if (qualifiedJobs.length === 0) {
+      console.log('No jobs meet the minimum priority threshold');
+      return;
+    }
+
+    // Sort by priority (highest first), then by date (newest first)
+    qualifiedJobs.sort((a, b) => {
+      if (b.priority !== a.priority) {
+        return b.priority - a.priority;
+      }
+      return new Date(b.publishedAt) - new Date(a.publishedAt);
+    });
+
+    // Post limited number of jobs
+    const jobsToPost = qualifiedJobs.slice(0, config.postsPerBatch);
+    console.log(`📤 Posting ${jobsToPost.length} jobs...`);
+
+    for (const job of jobsToPost) {
+      await postJobToChannel(job, job.priority);
+      // Add delay between posts to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    console.log('✅ Job posting cycle completed');
+  } catch (error) {
+    console.error('❌ Error in job fetch cycle:', error);
+  }
+}
+
+// Admin command: Manual job posting
+bot.onText(/\/post (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+
+  // Check if user is admin
+  if (userId !== config.adminId) {
+    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    return;
+  }
+
+  try {
+    const jobData = match[1];
+    const lines = jobData.split('\n').filter(l => l.trim());
+
+    if (lines.length < 3) {
+      await bot.sendMessage(chatId, '❌ Invalid format. Use:\n/post\nJob Title\nCompany Name\nJob Type\nApply URL');
+      return;
+    }
+
+    const [title, company, type, url] = lines;
+
+    const job = {
+      id: `manual_${Date.now()}`,
+      title,
+      company,
+      location: 'Remote',
+      type,
+      url,
+      description: '',
+      source: 'Manual'
+    };
+
+    await postJobToChannel(job);
+    await bot.sendMessage(chatId, '✅ Job posted successfully!');
+  } catch (error) {
+    await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+  }
+});
+
+// Admin command: Get stats
+bot.onText(/\/stats/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+
+  if (userId !== config.adminId) {
+    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    return;
+  }
+
+  const stats = `📊 <b>Bot Statistics</b>
+
+💼 Total jobs posted: ${postedJobs.size}
+⏰ Next scheduled run: ${getNextCronTime()}
+📅 Posts per batch: ${config.postsPerBatch}
+
+✅ Bot is running`;
+
+  await bot.sendMessage(chatId, stats, { parse_mode: 'HTML' });
+});
+
+// Admin command: Force job fetch
+bot.onText(/\/fetch/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+
+  if (userId !== config.adminId) {
+    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    return;
+  }
+
+  await bot.sendMessage(chatId, '🔍 Fetching jobs...');
+  await fetchAndPostJobs();
+  await bot.sendMessage(chatId, '✅ Fetch completed!');
+});
+
+// Admin command: Clear job history (use carefully!)
+bot.onText(/\/clear/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+
+  if (userId !== config.adminId) {
+    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    return;
+  }
+
+  postedJobs.clear();
+  await savePostedJobs();
+  await bot.sendMessage(chatId, '✅ Job history cleared!');
+});
+
+// Help command
+bot.onText(/\/help/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id.toString();
+
+  if (userId !== config.adminId) {
+    return;
+  }
+
+  const help = `🤖 <b>Admin Commands</b>
+
+/stats - View bot statistics
+/fetch - Manually fetch and post jobs
+/post - Manual job posting
+  Format:
+  /post
+  Job Title
+  Company Name
+  Full-time
+  https://apply-link.com
+
+/clear - Clear job history (use carefully!)
+/help - Show this help
+
+<i>Bot automatically posts jobs every 3 hours</i>`;
+
+  await bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
+});
+
+// Get next cron execution time (simplified)
+function getNextCronTime() {
+  const now = new Date();
+  const hours = Math.ceil(now.getHours() / 3) * 3;
+  const next = new Date(now);
+  next.setHours(hours, 0, 0, 0);
+  if (next <= now) {
+    next.setHours(next.getHours() + 3);
+  }
+  return next.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Initialize bot
+async function init() {
+  console.log('🤖 Remote Dev Jobs Bot Starting...');
+
+  // Load previous job history
+  await loadPostedJobs();
+
+  // Schedule automatic job posting
+  cron.schedule(config.cronSchedule, async () => {
+    console.log('\n⏰ Scheduled job fetch triggered');
+    await fetchAndPostJobs();
+  });
+
+  console.log(`✅ Bot started successfully!`);
+  console.log(`📢 Channel ID: ${config.channelId}`);
+  console.log(`👤 Admin ID: ${config.adminId}`);
+  console.log(`⏰ Schedule: ${config.cronSchedule} (every 3 hours)`);
+  console.log(`📊 Posts per batch: ${config.postsPerBatch}`);
+
+  // Optional: Run initial fetch on startup
+  // await fetchAndPostJobs();
+}
+
+// Start bot
+init().catch(console.error);
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n👋 Shutting down bot...');
+  await savePostedJobs();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n👋 Shutting down bot...');
+  await savePostedJobs();
+  process.exit(0);
+});
