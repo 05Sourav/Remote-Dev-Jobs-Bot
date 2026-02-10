@@ -188,8 +188,8 @@ const GLOBAL_REMOTE_KEYWORDS = [
 ];
 
 
-// Initialize bot
-const bot = new TelegramBot(config.botToken, { polling: true });
+// Initialize bot (polling disabled for production - cron-based bot doesn't need it)
+const bot = new TelegramBot(config.botToken, { polling: false });
 
 // Storage for posted jobs (to prevent duplicates)
 const STORAGE_FILE = path.join(__dirname, 'posted_jobs.json');
