@@ -60,6 +60,12 @@ const TECHNICAL_KEYWORDS = [
   'blockchain', 'smart contract', 'solidity', 'web3'
 ];
 
+// Stricter keywords for Greenhouse to ensure high quality
+const GREENHOUSE_KEYWORDS = [
+  'software', 'engineer', 'developer', 'backend', 'frontend', 'full stack', 'fullstack',
+  'platform', 'infrastructure', 'systems', 'mobile', 'android', 'ios', 'machine learning', 'ai engineer'
+];
+
 // Exclude non-technical roles
 const EXCLUDE_KEYWORDS = [
   // Content & Marketing
@@ -345,7 +351,7 @@ async function fetchUnstopJobs() {
     // Allowed technical domains for Unstop (REMOVED: API doesn't return domain field reliably)
     // We will rely on the main filterJobs() function which uses rigorous keyword matching on title/description.
 
-    console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
+    // Removed duplicate log
 
     // Transform to standard format
     return allOpportunities.map(job => {
@@ -410,12 +416,13 @@ async function fetchGreenhouseJobs() {
     try {
       const response = await axios.get(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs`);
       const jobs = response.data.jobs || [];
+      const totalRaw = jobs.length;
 
       // Filter and map jobs
       const relevantJobs = jobs.filter(job => {
         const title = job.title.toLowerCase();
-        // Check for technical keywords in title
-        return TECHNICAL_KEYWORDS.some(keyword => title.includes(keyword));
+        // Check for STRICT technical keywords
+        return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
       }).map(job => ({
         id: `gh_${company}_${job.id}`,
         title: job.title,
@@ -424,11 +431,12 @@ async function fetchGreenhouseJobs() {
         type: 'Full-time', // Greenhouse API doesn't always provide type list efficiently here
         salary: null, // Public API often excludes salary
         url: job.absolute_url,
-        description: job.title, // Description requires separate fetch per job, skipping for performance
+        description: `${job.title} | Location: ${job.location?.name || 'Remote'} | Source: ${company}`, // Enriched description
         publishedAt: job.updated_at || new Date().toISOString(),
         source: 'Greenhouse'
       }));
 
+      console.log(`  - ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
       allJobs.push(...relevantJobs);
     } catch (error) {
       // Log error but continue to next company
@@ -448,7 +456,9 @@ function calculateJobPriority(job) {
 
   // Check for priority keywords (entry-level indicators) - SMALL BOOST (Reduced to 15)
   const hasPriorityKeyword = PRIORITY_KEYWORDS.some(keyword => combinedText.includes(keyword));
-  const isInternship = hasPriorityKeyword;
+  // Strict internship check (avoid 'junior engineer' being marked as intern)
+  const isInternship = titleLower.includes('intern') || titleLower.includes('internship');
+
   if (isInternship) {
     score += 15;
   }
@@ -512,7 +522,7 @@ function calculateJobPriority(job) {
   ];
 
   const techMatches = techStackBonus.filter(tech => combinedText.includes(tech)).length;
-  score += techMatches * 7;
+  score += Math.min(techMatches * 7, 25); // Cap bonus at 25 points
 
   return Math.max(0, score); // Ensure score doesn't go negative
 }
@@ -570,15 +580,15 @@ function formatJobMessage(job, priority = 0) {
 
 <i>Via ${job.source}</i>
 
-${hashtags}
+📢 Share this with a friend who’s job hunting
 
-📢 Share this with a friend who’s job hunting`;
+${hashtags}`;
 }
 
 // Generate hashtags based on job details
 function generateHashtags(job) {
   const tags = ['#RemoteJobs', '#DeveloperJobs'];
-  const searchText = `${job.title} ${job.description || ''}`.toLowerCase();
+  const searchText = `${job.title} ${job.description || ''} `.toLowerCase();
 
   // Job level tags
   if (searchText.includes('intern')) {
@@ -644,7 +654,7 @@ async function postJobToChannel(job, priority = 0) {
     });
 
     // Mark as posted (both ID and composite key)
-    const compositeKey = `${job.id}|${job.url}`;
+    const compositeKey = `${job.id}| ${job.url} `;
     postedJobs.add(job.id);
     postedJobs.add(compositeKey);
     await savePostedJobs();
@@ -652,7 +662,7 @@ async function postJobToChannel(job, priority = 0) {
     console.log(`✅ Posted: ${job.title} at ${job.company} (Priority: ${priority})`);
     return true;
   } catch (error) {
-    console.error(`❌ Error posting job ${job.id}:`, error.message);
+    console.error(`❌ Error posting job ${job.id}: `, error.message);
     return false;
   }
 }
@@ -691,7 +701,7 @@ async function fetchAndPostJobs() {
     const MIN_PRIORITY_THRESHOLD = 10;
     const qualifiedJobs = jobsWithPriority.filter(job => job.priority >= MIN_PRIORITY_THRESHOLD);
 
-    console.log(`🎯 ${qualifiedJobs.length} jobs meet priority threshold (>=${MIN_PRIORITY_THRESHOLD})`);
+    console.log(`🎯 ${qualifiedJobs.length} jobs meet priority threshold(>= ${MIN_PRIORITY_THRESHOLD})`);
 
     if (qualifiedJobs.length === 0) {
       console.log('No jobs meet the minimum priority threshold');
@@ -747,7 +757,7 @@ async function fetchAndPostJobs() {
     // Sort final selection by priority
     jobsToPost.sort((a, b) => b.priority - a.priority);
 
-    console.log(`📤 Posting ${jobsToPost.length} jobs (${selectedFT.length} FT, ${selectedIntern.length} Interns)...`);
+    console.log(`📤 Posting ${jobsToPost.length} jobs(${selectedFT.length} FT, ${selectedIntern.length} Interns)...`);
 
     for (const job of jobsToPost) {
       await postJobToChannel(job, job.priority);
@@ -784,7 +794,7 @@ bot.onText(/\/post (.+)/, async (msg, match) => {
     const [title, company, type, url] = lines;
 
     const job = {
-      id: `manual_${Date.now()}`,
+      id: `manual_${Date.now()} `,
       title,
       company,
       location: 'Remote',
@@ -797,7 +807,7 @@ bot.onText(/\/post (.+)/, async (msg, match) => {
     await postJobToChannel(job);
     await bot.sendMessage(chatId, '✅ Job posted successfully!');
   } catch (error) {
-    await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+    await bot.sendMessage(chatId, `❌ Error: ${error.message} `);
   }
 });
 
@@ -863,20 +873,20 @@ bot.onText(/\/help/, async (msg) => {
 
   const help = `🤖 <b>Admin Commands</b>
 
-/stats - View bot statistics
-/fetch - Manually fetch and post jobs
-/post - Manual job posting
+    / stats - View bot statistics
+      / fetch - Manually fetch and post jobs
+        / post - Manual job posting
   Format:
   /post
   Job Title
   Company Name
-  Full-time
+  Full - time
   https://apply-link.com
 
 /clear - Clear job history (use carefully!)
-/help - Show this help
+    / help - Show this help
 
-<i>Bot automatically posts jobs every 3 hours</i>`;
+      < i > Bot automatically posts jobs every 3 hours</i > `;
 
   await bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
 });
@@ -907,10 +917,10 @@ async function init() {
   });
 
   console.log(`✅ Bot started successfully!`);
-  console.log(`📢 Channel ID: ${config.channelId}`);
-  console.log(`👤 Admin ID: ${config.adminId}`);
+  console.log(`📢 Channel ID: ${config.channelId} `);
+  console.log(`👤 Admin ID: ${config.adminId} `);
   console.log(`⏰ Schedule: ${config.cronSchedule} (every 3 hours)`);
-  console.log(`📊 Posts per batch: ${config.postsPerBatch}`);
+  console.log(`📊 Posts per batch: ${config.postsPerBatch} `);
 
   // Run initial fetch on startup
   try {
@@ -954,7 +964,7 @@ app.get('/trigger-fetch', async (req, res) => {
 });
 
 app.listen(config.port, '0.0.0.0', () => {
-  console.log(`🌐 Health check server running on port ${config.port}`);
+  console.log(`🌐 Health check server running on port ${config.port} `);
 });
 
 // Start bot
