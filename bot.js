@@ -8,6 +8,7 @@ const Parser = require('rss-parser');
 const fs = require('fs').promises;
 const path = require('path');
 const express = require('express');
+const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
 
 // Configuration
 const config = {
@@ -400,6 +401,44 @@ async function fetchUnstopJobs() {
   }
 }
 
+// Fetch jobs from Greenhouse boards
+async function fetchGreenhouseJobs() {
+  console.log('🌱 Fetching Greenhouse jobs...');
+  const allJobs = [];
+
+  for (const company of GREENHOUSE_COMPANIES) {
+    try {
+      const response = await axios.get(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs`);
+      const jobs = response.data.jobs || [];
+
+      // Filter and map jobs
+      const relevantJobs = jobs.filter(job => {
+        const title = job.title.toLowerCase();
+        // Check for technical keywords in title
+        return TECHNICAL_KEYWORDS.some(keyword => title.includes(keyword));
+      }).map(job => ({
+        id: `gh_${company}_${job.id}`,
+        title: job.title,
+        company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
+        location: job.location?.name || 'Remote',
+        type: 'Full-time', // Greenhouse API doesn't always provide type list efficiently here
+        salary: null, // Public API often excludes salary
+        url: job.absolute_url,
+        description: job.title, // Description requires separate fetch per job, skipping for performance
+        publishedAt: job.updated_at || new Date().toISOString(),
+        source: 'Greenhouse'
+      }));
+
+      allJobs.push(...relevantJobs);
+    } catch (error) {
+      // Log error but continue to next company
+      console.error(`Error fetching Greenhouse jobs for ${company}:`, error.message);
+    }
+  }
+
+  return allJobs;
+}
+
 // Calculate job priority score
 function calculateJobPriority(job) {
   const titleLower = job.title.toLowerCase();
@@ -624,14 +663,15 @@ async function fetchAndPostJobs() {
 
   try {
     // Fetch from all sources
-    const [remotiveJobs, weworkremotelyJobs, unstopJobs] = await Promise.all([
+    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs] = await Promise.all([
       fetchRemotiveJobs(),
       fetchWeWorkRemotelyJobs(),
-      fetchUnstopJobs()
+      fetchUnstopJobs(),
+      fetchGreenhouseJobs()
     ]);
 
     // Combine and filter
-    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs];
+    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs];
     const newJobs = filterJobs(allJobs);
 
     console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);
