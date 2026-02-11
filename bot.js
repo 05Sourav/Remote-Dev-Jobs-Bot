@@ -872,21 +872,20 @@ async function init() {
   console.log(`⏰ Schedule: ${config.cronSchedule} (every 3 hours)`);
   console.log(`📊 Posts per batch: ${config.postsPerBatch}`);
 
-  // Optional: Run initial fetch on startup
-  // await fetchAndPostJobs();
+  // Run initial fetch on startup
+  try {
+    console.log('🚀 Running initial job fetch...');
+    await fetchAndPostJobs();
+  } catch (error) {
+    console.error('❌ Error during initial fetch:', error);
+  }
 }
 
 // Health check server for Render
 const app = express();
 
 app.get('/', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Remote Dev Jobs Bot is running',
-    postedJobs: postedJobs.size,
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
+  res.send('Bot is running');
 });
 
 app.get('/health', (req, res) => {
