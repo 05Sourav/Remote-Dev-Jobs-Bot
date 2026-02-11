@@ -9,6 +9,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const express = require('express');
 const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
+const LEVER_COMPANIES = require('./leverCompanies');
 
 // Configuration
 const config = {
@@ -447,6 +448,45 @@ async function fetchGreenhouseJobs() {
   return allJobs;
 }
 
+// Fetch jobs from Lever boards
+async function fetchLeverJobs() {
+  console.log('🚀 Fetching Lever jobs...');
+  const allJobs = [];
+
+  for (const company of LEVER_COMPANIES) {
+    try {
+      const response = await axios.get(`https://api.lever.co/v0/postings/${company}?mode=json`);
+      const jobs = response.data || [];
+      const totalRaw = jobs.length;
+
+      // Filter and map jobs
+      const relevantJobs = jobs.filter(job => {
+        const title = job.text.toLowerCase();
+        // Check for STRICT technical keywords (reuse Greenhouse list)
+        return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
+      }).map(job => ({
+        id: `lever_${company}_${job.id}`,
+        title: job.text,
+        company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
+        location: job.categories?.location || job.country || 'Remote',
+        type: job.categories?.commitment || 'Full-time',
+        salary: null, // Lever API rarely exposes salary in public list
+        url: job.hostedUrl,
+        description: `${job.text} | Location: ${job.categories?.location || 'Remote'} | Source: ${company}`,
+        publishedAt: job.createdAt ? new Date(job.createdAt).toISOString() : new Date().toISOString(),
+        source: 'Lever'
+      }));
+
+      console.log(`  - ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
+      allJobs.push(...relevantJobs);
+    } catch (error) {
+      console.error(`Error fetching Lever jobs for ${company}:`, error.message);
+    }
+  }
+
+  return allJobs;
+}
+
 // Calculate job priority score
 function calculateJobPriority(job) {
   const titleLower = job.title.toLowerCase();
@@ -673,15 +713,16 @@ async function fetchAndPostJobs() {
 
   try {
     // Fetch from all sources
-    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs] = await Promise.all([
+    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs, leverJobs] = await Promise.all([
       fetchRemotiveJobs(),
       fetchWeWorkRemotelyJobs(),
       fetchUnstopJobs(),
-      fetchGreenhouseJobs()
+      fetchGreenhouseJobs(),
+      fetchLeverJobs()
     ]);
 
     // Combine and filter
-    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs];
+    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs, ...leverJobs];
     const newJobs = filterJobs(allJobs);
 
     console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);

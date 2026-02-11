@@ -3,12 +3,8 @@
 // e.g., https://boards.greenhouse.io/stripe -> 'stripe'
 
 module.exports = [
-    'stripe',
-    'datadog',
-    'coinbase',
-    'figma',
-    'airbnb',
-    'dropbox',
-    'lyft',
-    'grammarly'
+    'stripe', 'datadog', 'coinbase', 'figma',
+    'airbnb', 'dropbox', 'lyft', 'grammarly',
+    'carta', 'hackerrank', 'gusto', 'scaleai',
+    'calendly', 'brex', 'webflow', 'asana', 'coursera'
 ];
