@@ -149,6 +149,15 @@ const PRIORITY_KEYWORDS = [
 ];
 
 // Location-restricted keywords to exclude
+// Allowed locations (India-based)
+const INDIA_LOCATIONS = [
+  'india', 'bangalore', 'bengaluru', 'delhi', 'new delhi', 'noida',
+  'gurgaon', 'gurugram', 'mumbai', 'pune', 'hyderabad', 'chennai',
+  'kolkata', 'ahmedabad', 'chandigarh', 'indore', 'jaipur', 'kochi',
+  'trivandrum', 'thiruvananthapuram', 'coimbatore'
+];
+
+// Location-restricted keywords to exclude (Still useful for scoring penalties)
 const LOCATION_RESTRICTED_KEYWORDS = [
   // Germany-specific
   'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'cologne',
@@ -203,6 +212,19 @@ const GLOBAL_REMOTE_KEYWORDS = [
   'international', 'globally distributed'
 ];
 
+
+// Top Tier Companies (+10 Bonus)
+const TOP_TIER_COMPANIES = [
+  'stripe', 'airbnb', 'coinbase', 'figma', 'datadog', 'dropbox',
+  'plaid', 'lyft', 'asana', 'grammarly', 'brex', 'scaleai',
+  'webflow', 'cred'
+];
+
+// Mid Tier Companies (+5 Bonus)
+const GOOD_COMPANIES = [
+  'carta', 'gusto', 'calendly', 'coursera', 'hackerrank',
+  'zoox', 'shieldai', 'rackspace', 'ciandt', 'houzz'
+];
 
 // Initialize bot (polling disabled for production - cron-based bot doesn't need it)
 const bot = new TelegramBot(config.botToken, { polling: false });
@@ -379,7 +401,7 @@ async function fetchUnstopJobs() {
         const currency = job.jobDetail.currency === 'fa-rupee' ? '₹' : '$';
         const payIn = job.jobDetail.pay_in || 'monthly';
 
-        if (max) {
+        if (max && max !== min) {
           salary = `${currency}${min}-${max}/${payIn}`;
         } else {
           salary = `${currency}${min}/${payIn}`;
@@ -419,8 +441,21 @@ async function fetchGreenhouseJobs() {
       const jobs = response.data.jobs || [];
       const totalRaw = jobs.length;
 
+      // 1. Sort by updated_at (Newest first)
+      jobs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+      // 2. Filter by Date (Max 30 days old)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const recentJobs = jobs.filter(job => new Date(job.updated_at) >= thirtyDaysAgo);
+      const recentCount = recentJobs.length;
+
+      // 3. Limit per company (Max 60 jobs)
+      const limitedJobs = recentJobs.slice(0, 60);
+
       // Filter and map jobs
-      const relevantJobs = jobs.filter(job => {
+      const relevantJobs = limitedJobs.filter(job => {
         const title = job.title.toLowerCase();
         // Check for STRICT technical keywords
         return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
@@ -437,7 +472,7 @@ async function fetchGreenhouseJobs() {
         source: 'Greenhouse'
       }));
 
-      console.log(`  - [Greenhouse] ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
+      console.log(`  - [Greenhouse] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`);
       allJobs.push(...relevantJobs);
     } catch (error) {
       // Log error but continue to next company
@@ -459,14 +494,27 @@ async function fetchLeverJobs() {
       const jobs = response.data || [];
       const totalRaw = jobs.length;
 
+      // 1. Sort by createdAt (Newest first)
+      jobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // 2. Filter by Date (Max 30 days old)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const recentJobs = jobs.filter(job => new Date(job.createdAt) >= thirtyDaysAgo);
+      const recentCount = recentJobs.length;
+
+      // 3. Limit per company (Max 60 jobs)
+      const limitedJobs = recentJobs.slice(0, 60);
+
       // Filter and map jobs
-      const relevantJobs = jobs.filter(job => {
+      const relevantJobs = limitedJobs.filter(job => {
         const title = job.text.toLowerCase();
         // Check for STRICT technical keywords (reuse Greenhouse list)
         return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
       }).map(job => ({
         id: `lever_${company}_${job.id}`,
-        title: job.text,
+        title: job.text.replace(/^\[Job-[^\]]+\]\s*/i, '').trim(),
         company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
         location: job.categories?.location || job.country || 'Remote',
         type: job.categories?.commitment || 'Full-time',
@@ -477,7 +525,7 @@ async function fetchLeverJobs() {
         source: 'Lever'
       }));
 
-      console.log(`  - [Lever] ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
+      console.log(`  - [Lever] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`);
       allJobs.push(...relevantJobs);
     } catch (error) {
       console.error(`  - [Lever] Error fetching ${company}:`, error.message);
@@ -564,6 +612,15 @@ function calculateJobPriority(job) {
   const techMatches = techStackBonus.filter(tech => combinedText.includes(tech)).length;
   score += Math.min(techMatches * 7, 25); // Cap bonus at 25 points
 
+  // Company Tiers Bonus
+  const companyLower = job.company.toLowerCase();
+
+  if (TOP_TIER_COMPANIES.some(c => companyLower.includes(c))) {
+    score += 10; // Top Tier Bonus
+  } else if (GOOD_COMPANIES.some(c => companyLower.includes(c))) {
+    score += 5;  // Mid Tier Bonus
+  }
+
   return Math.max(0, score); // Ensure score doesn't go negative
 }
 
@@ -595,6 +652,16 @@ function filterJobs(jobs) {
     const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some(keyword =>
       titleLower.includes(keyword.toLowerCase())
     );
+
+    // STRICT LOCATION FILTER: Must be Remote OR in India
+    const locationLower = job.location.toLowerCase();
+    const isRemote = locationLower.includes('remote') || locationLower.includes('anywhere');
+    const isIndia = INDIA_LOCATIONS.some(loc => locationLower.includes(loc));
+
+    if (!isRemote && !isIndia) {
+      // console.log(`Skipping non-India/non-Remote job: ${job.title} at ${job.company} (${job.location})`);
+      return false;
+    }
 
     return hasTechnicalKeyword;
   });
