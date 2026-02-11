@@ -437,11 +437,11 @@ async function fetchGreenhouseJobs() {
         source: 'Greenhouse'
       }));
 
-      console.log(`  - ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
+      console.log(`  - [Greenhouse] ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
       allJobs.push(...relevantJobs);
     } catch (error) {
       // Log error but continue to next company
-      console.error(`Error fetching Greenhouse jobs for ${company}:`, error.message);
+      console.error(`  - [Greenhouse] Error fetching ${company}:`, error.message);
     }
   }
 
@@ -477,10 +477,10 @@ async function fetchLeverJobs() {
         source: 'Lever'
       }));
 
-      console.log(`  - ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
+      console.log(`  - [Lever] ${company}: Found ${relevantJobs.length} relevant jobs (from ${totalRaw})`);
       allJobs.push(...relevantJobs);
     } catch (error) {
-      console.error(`Error fetching Lever jobs for ${company}:`, error.message);
+      console.error(`  - [Lever] Error fetching ${company}:`, error.message);
     }
   }
 
@@ -1004,22 +1004,25 @@ app.get('/trigger-fetch', async (req, res) => {
   }
 });
 
-app.listen(config.port, '0.0.0.0', () => {
-  console.log(`🌐 Health check server running on port ${config.port} `);
-});
-
 // Start bot
 init().catch(console.error);
+
+// Start health check server IMMEDIATELY to satisfy port binding requirements
+const server = app.listen(config.port, '0.0.0.0', () => {
+  console.log(`🌐 Health check server running on port ${config.port}`);
+});
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n👋 Shutting down bot...');
+  server.close();
   await savePostedJobs();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n👋 Shutting down bot...');
+  server.close();
   await savePostedJobs();
   process.exit(0);
 });
