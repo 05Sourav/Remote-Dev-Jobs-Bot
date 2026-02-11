@@ -207,9 +207,11 @@ const LANGUAGE_PATTERNS = [
 
 // Global remote indicators for priority boost
 const GLOBAL_REMOTE_KEYWORDS = [
-  'worldwide', 'anywhere', 'global', 'remote-first',
-  'location independent', 'work from anywhere', 'any timezone',
-  'international', 'globally distributed'
+  'worldwide',
+  'anywhere',
+  'global',
+  'work from anywhere',
+  'location independent'
 ];
 
 
@@ -655,13 +657,28 @@ function filterJobs(jobs) {
 
     // STRICT LOCATION FILTER: Must be Remote OR in India
     const locationLower = job.location.toLowerCase();
-    const isRemote = locationLower.includes('remote') || locationLower.includes('anywhere');
+
+    // Check for India location
     const isIndia = INDIA_LOCATIONS.some(loc => locationLower.includes(loc));
 
-    if (!isRemote && !isIndia) {
-      // console.log(`Skipping non-India/non-Remote job: ${job.title} at ${job.company} (${job.location})`);
-      return false;
+    // Check for Global Remote
+    // "Treat a job as global remote ONLY if location or description contains: worldwide, anywhere, global, work from anywhere, location independent"
+    // We check combined keywords against Title, Description, and Location
+    const fullTextForRemoteCheck = `${titleLower} ${descLower} ${locationLower}`;
+    const isGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some(k => fullTextForRemoteCheck.includes(k));
+    const isRemote = locationLower.includes('remote');
+
+    // Allow job ONLY if: isIndia OR (isRemote AND isGlobalRemote)
+    if (isIndia) {
+      return hasTechnicalKeyword;
     }
+
+    if (isRemote && isGlobalRemote) {
+      return hasTechnicalKeyword;
+    }
+
+    // Reject everything else (Regional remote, generic remote without global keywords, non-India)
+    return false;
 
     return hasTechnicalKeyword;
   });
