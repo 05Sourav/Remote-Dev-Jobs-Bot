@@ -779,7 +779,7 @@ async function postJobToChannel(job, priority = 0) {
     });
 
     // Mark as posted (both ID and composite key)
-    const compositeKey = `${job.id}| ${job.url} `;
+    const compositeKey = `${job.id}|${job.url} `;
     postedJobs.add(job.id);
     postedJobs.add(compositeKey);
     await savePostedJobs();
@@ -1020,20 +1020,25 @@ bot.onText(/\/help/, async (msg) => {
 // Get next cron execution time
 function getNextCronTime() {
   try {
+    const nowIST = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+
     const interval = cronParser.parseExpression(config.cronSchedule, {
-      tz: 'Asia/Kolkata' // Set to Indian Standard Time
+      currentDate: nowIST,
+      tz: "Asia/Kolkata"
     });
 
     const next = interval.next().toDate();
 
-    return next.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return next.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
       hour12: true
     });
   } catch (err) {
-    console.error('Error parsing cron:', err);
-    return 'Unknown';
+    console.error("Error parsing cron:", err);
+    return "Unknown";
   }
 }
 
