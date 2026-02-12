@@ -1063,6 +1063,15 @@ app.get('/', (req, res) => {
   res.send('Bot is running');
 });
 
+// Middleware to parse JSON bodies for webhook updates
+app.use(express.json());
+
+// Webhook route for Telegram updates
+app.post('/bot', (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
