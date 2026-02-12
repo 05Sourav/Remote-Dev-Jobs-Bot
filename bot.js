@@ -7,6 +7,7 @@ const axios = require('axios');
 const Parser = require('rss-parser');
 const fs = require('fs').promises;
 const path = require('path');
+const parser = require('cron-parser');
 const express = require('express');
 const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
 const LEVER_COMPANIES = require('./leverCompanies');
@@ -949,7 +950,7 @@ bot.onText(/\/stats/, async (msg) => {
   const stats = `📊 <b>Bot Statistics</b>
 
 💼 Total jobs posted: ${Math.floor(postedJobs.size / 2)}
-⏰ Chronicle Schedule: ${config.cronSchedule}
+⏰ Next scheduled run: ${getNextCronTime()}
 📅 Posts per batch: ${config.postsPerBatch}
 
 ✅ Bot is running`;
@@ -1016,17 +1017,26 @@ bot.onText(/\/help/, async (msg) => {
   await bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
 });
 
-// Get next cron execution time (simplified)
+// Get next cron execution time
 function getNextCronTime() {
-  const now = new Date();
-  const hours = Math.ceil(now.getHours() / 3) * 3;
-  const next = new Date(now);
-  next.setHours(hours, 0, 0, 0);
-  if (next <= now) {
-    next.setHours(next.getHours() + 3);
+  try {
+    const interval = parser.parseExpression(config.cronSchedule, {
+      tz: 'Asia/Kolkata' // Set to Indian Standard Time
+    });
+
+    const next = interval.next().toDate();
+
+    return next.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (err) {
+    console.error('Error parsing cron:', err);
+    return 'Unknown';
   }
-  return next.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
+
 
 // Initialize bot
 async function init() {
