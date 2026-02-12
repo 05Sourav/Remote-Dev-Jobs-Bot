@@ -1049,6 +1049,8 @@ async function init() {
   cron.schedule(config.cronSchedule, async () => {
     console.log('\n⏰ Scheduled job fetch triggered');
     await fetchAndPostJobs();
+  }, {
+    timezone: "Asia/Kolkata"
   });
 
   console.log(`✅ Bot started successfully!`);
