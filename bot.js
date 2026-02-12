@@ -7,7 +7,7 @@ const axios = require('axios');
 const Parser = require('rss-parser');
 const fs = require('fs').promises;
 const path = require('path');
-const parser = require('cron-parser');
+const cronParser = require('cron-parser');
 const express = require('express');
 const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
 const LEVER_COMPANIES = require('./leverCompanies');
@@ -1020,7 +1020,7 @@ bot.onText(/\/help/, async (msg) => {
 // Get next cron execution time
 function getNextCronTime() {
   try {
-    const interval = parser.parseExpression(config.cronSchedule, {
+    const interval = cronParser.parseExpression(config.cronSchedule, {
       tz: 'Asia/Kolkata' // Set to Indian Standard Time
     });
 
