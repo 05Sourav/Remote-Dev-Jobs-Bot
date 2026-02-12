@@ -1020,12 +1020,7 @@ bot.onText(/\/help/, async (msg) => {
 // Get next cron execution time
 function getNextCronTime() {
   try {
-    const nowIST = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-
     const interval = cronParser.parseExpression(config.cronSchedule, {
-      currentDate: nowIST,
       tz: "Asia/Kolkata"
     });
 
@@ -1034,7 +1029,8 @@ function getNextCronTime() {
     return next.toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: true
+      hour12: true,
+      timeZone: "Asia/Kolkata"
     });
   } catch (err) {
     console.error("Error parsing cron:", err);
@@ -1061,7 +1057,7 @@ async function init() {
   console.log(`✅ Bot started successfully!`);
   console.log(`📢 Channel ID: ${config.channelId} `);
   console.log(`👤 Admin ID: ${config.adminId} `);
-  console.log(`⏰ Schedule: ${config.cronSchedule} (every 3 hours)`);
+  console.log(`⏰ Schedule: ${config.cronSchedule}`);
   console.log(`📊 Posts per batch: ${config.postsPerBatch} `);
 
   // Run initial fetch on startup
