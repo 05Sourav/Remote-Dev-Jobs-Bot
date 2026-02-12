@@ -948,8 +948,8 @@ bot.onText(/\/stats/, async (msg) => {
 
   const stats = `📊 <b>Bot Statistics</b>
 
-💼 Total jobs posted: ${postedJobs.size}
-⏰ Next scheduled run: ${getNextCronTime()}
+💼 Total jobs posted: ${Math.floor(postedJobs.size / 2)}
+⏰ Chronicle Schedule: ${config.cronSchedule}
 📅 Posts per batch: ${config.postsPerBatch}
 
 ✅ Bot is running`;
