@@ -11,6 +11,8 @@ const cronParser = require('cron-parser');
 const express = require('express');
 const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
 const LEVER_COMPANIES = require('./leverCompanies');
+const SMARTRECRUITERS_COMPANIES = require('./smartRecruitersCompanies');
+const WORKDAY_COMPANIES = require('./workdayCompanies');
 
 // Configuration
 const config = {
@@ -223,13 +225,19 @@ const GLOBAL_REMOTE_KEYWORDS = [
 const TOP_TIER_COMPANIES = [
   'stripe', 'airbnb', 'coinbase', 'figma', 'datadog', 'dropbox',
   'plaid', 'lyft', 'asana', 'grammarly', 'brex', 'scaleai',
-  'webflow', 'cred'
+  'webflow', 'cred',
+  // Expanded List
+  'amazon', 'nvidia', 'qualcomm', 'adobe', 'paypal', 'intel',
+  'servicenow', 'visa', 'mastercard'
 ];
 
 // Mid Tier Companies (+5 Bonus)
 const GOOD_COMPANIES = [
   'carta', 'gusto', 'calendly', 'coursera', 'hackerrank',
-  'zoox', 'shieldai', 'rackspace', 'ciandt', 'houzz'
+  'zoox', 'shieldai', 'rackspace', 'ciandt', 'houzz',
+  // Expanded List
+  'bosch', 'siemens', 'dell', 'ericsson', 'infineon', 'capgemini',
+  'schneider', 'honeywell', 'nokia', 'western digital', 'publicis'
 ];
 
 // Initialize bot (polling disabled for production - cron-based bot doesn't need it)
@@ -622,9 +630,9 @@ function calculateJobPriority(job) {
   const companyLower = job.company.toLowerCase();
 
   if (TOP_TIER_COMPANIES.some(c => companyLower.includes(c))) {
-    score += 10; // Top Tier Bonus
+    score += 4; // Top Tier Bonus (Reduced from 10 to 4 to improve diversity)
   } else if (GOOD_COMPANIES.some(c => companyLower.includes(c))) {
-    score += 5;  // Mid Tier Bonus
+    score += 2;  // Mid Tier Bonus (Reduced from 5 to 2)
   }
 
   return Math.max(0, score); // Ensure score doesn't go negative
@@ -820,22 +828,150 @@ async function postJobToChannel(job, priority = 0) {
   }
 }
 
+// --- New Helper Functions for Diversity and New Sources ---
+
+// Round-Robin Selection to improve diversity
+function selectRoundRobinJobs(jobs, limit) {
+  // Group by company
+  const jobsByCompany = {};
+  for (const job of jobs) {
+    if (!jobsByCompany[job.company]) {
+      jobsByCompany[job.company] = [];
+    }
+    jobsByCompany[job.company].push(job);
+  }
+
+  // Sort jobs within each company by priority
+  for (const company in jobsByCompany) {
+    jobsByCompany[company].sort((a, b) => b.priority - a.priority);
+  }
+
+  const selectedJobs = [];
+  const companies = Object.keys(jobsByCompany);
+
+  // Create a priority queue of companies (optional, or just cycle through)
+  // Simple cycle is fine for diversity.
+
+  let hasMore = true;
+  while (selectedJobs.length < limit && hasMore) {
+    hasMore = false;
+    for (const company of companies) {
+      if (selectedJobs.length >= limit) break;
+
+      if (jobsByCompany[company].length > 0) {
+        // Take the best job from this company
+        selectedJobs.push(jobsByCompany[company].shift());
+        hasMore = true;
+      }
+    }
+  }
+
+  return selectedJobs;
+}
+
+// Fetch SmartRecruiters (Public API)
+async function fetchSmartRecruitersJobs() {
+  console.log('Fetching SmartRecruiters jobs...');
+  const allJobs = [];
+
+  for (const company of SMARTRECRUITERS_COMPANIES) {
+    try {
+      // Fetch list of jobs
+      const url = `https://api.smartrecruiters.com/v1/companies/${company.id}/postings?limit=100`;
+      const response = await axios.get(url, { timeout: 10000 });
+      const jobs = response.data.content || [];
+
+      for (const job of jobs) {
+        // Location processing
+        let locationStr = 'Unknown';
+        if (job.location) {
+          const parts = [job.location.city, job.location.region, job.location.country].filter(Boolean);
+          locationStr = parts.join(', ');
+          if (job.location.remote) locationStr += ' (Remote)';
+        }
+
+        allJobs.push({
+          id: `smartrecruiters-${job.id}`,
+          title: job.name,
+          company: company.name,
+          location: locationStr,
+          description: job.name, // List API doesn't provide full description, rely on Title for keywords
+          url: `https://jobs.smartrecruiters.com/${company.id}/${job.id}`,
+          publishedAt: job.releasedDate, // ISO Date
+          source: 'SmartRecruiters'
+        });
+      }
+    } catch (e) {
+      console.error(`Error fetching SmartRecruiters for ${company.name}: ${e.message}`);
+    }
+  }
+  return allJobs;
+}
+
+// Fetch Workday (JSON Endpoint)
+async function fetchWorkdayJobs() {
+  console.log('Fetching Workday jobs...');
+  const allJobs = [];
+
+  for (const company of WORKDAY_COMPANIES) {
+    try {
+      const url = `https://${company.tenant}.${company.host}.myworkdayjobs.com/wday/cxs/${company.tenant}/${company.site}/jobs`;
+      const payload = {
+        "appliedFacets": {},
+        "limit": 50,
+        "offset": 0,
+        "searchText": ""
+      };
+
+      const response = await axios.post(url, payload, {
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        timeout: 10000
+      });
+
+      const jobs = response.data.jobPostings || [];
+
+      for (const job of jobs) {
+        const fullUrl = `https://${company.tenant}.${company.host}.myworkdayjobs.com/${company.site}${job.externalPath}`;
+
+        // Construct description from potential fields
+        const desc = job.bulletFields ? job.bulletFields.join(' ') : job.title;
+
+        allJobs.push({
+          id: `workday-${company.tenant}-${job.bulletFields ? job.bulletFields[0] : job.externalPath.replace(/\//g, '-')}`,
+          title: job.title,
+          company: company.name,
+          location: job.locationsText || 'Unknown',
+          description: desc,
+          url: fullUrl,
+          publishedAt: job.postedOn,
+          source: 'Workday'
+        });
+      }
+    } catch (e) {
+      console.error(`Error fetching Workday for ${company.name}: ${e.message}`);
+    }
+  }
+  return allJobs;
+}
+
 // Main job fetching and posting function
 async function fetchAndPostJobs() {
   console.log('\n🔍 Starting job fetch cycle...');
 
   try {
     // Fetch from all sources
-    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs, leverJobs] = await Promise.all([
+    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs, leverJobs, smartRecruitersJobs, workdayJobs] = await Promise.all([
       fetchRemotiveJobs(),
       fetchWeWorkRemotelyJobs(),
       fetchUnstopJobs(),
       fetchGreenhouseJobs(),
-      fetchLeverJobs()
+      fetchLeverJobs(),
+      fetchSmartRecruitersJobs(),
+      fetchWorkdayJobs()
     ]);
 
     // Combine and filter
-    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs, ...leverJobs];
+    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs, ...leverJobs, ...smartRecruitersJobs, ...workdayJobs];
     const newJobs = filterJobs(allJobs);
 
     console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);
@@ -870,40 +1006,9 @@ async function fetchAndPostJobs() {
       return new Date(b.publishedAt) - new Date(a.publishedAt);
     });
 
-    // Balanced Selection Logic
-    // We want a mix of Full-Time and Internships (e.g., 60% FT, 40% Intern)
-    const internships = qualifiedJobs.filter(job =>
-      job.title.toLowerCase().includes('intern') ||
-      job.title.toLowerCase().includes('trainee')
-    );
-    const fullTimeJobs = qualifiedJobs.filter(job =>
-      !job.title.toLowerCase().includes('intern') &&
-      !job.title.toLowerCase().includes('trainee')
-    );
-
-    const targetTotal = config.postsPerBatch; // e.g., 5
-    const targetFT = Math.ceil(targetTotal * 0.6); // Target 3 FT
-    const targetIntern = targetTotal - targetFT;   // Target 2 Interns
-
-    let selectedFT = fullTimeJobs.slice(0, targetFT);
-    let selectedIntern = internships.slice(0, targetIntern);
-
-    // If we don't have enough FT, fill with Interns
-    if (selectedFT.length < targetFT) {
-      const needed = targetFT - selectedFT.length;
-      const extraInterns = internships.slice(targetIntern, targetIntern + needed);
-      selectedIntern = [...selectedIntern, ...extraInterns];
-    }
-
-    // If we don't have enough Interns, fill with FT
-    if (selectedIntern.length < targetIntern) {
-      const needed = targetIntern - selectedIntern.length;
-      const extraFT = fullTimeJobs.slice(targetFT, targetFT + needed);
-      selectedFT = [...selectedFT, ...extraFT];
-    }
-
-    // Combine and re-sort by priority
-    let jobsToPost = [...selectedFT, ...selectedIntern];
+    // Round-Robin Selection for Diversity
+    // Select jobs fairly across companies up to the limit
+    let jobsToPost = selectRoundRobinJobs(qualifiedJobs, config.postsPerBatch);
 
     // Safety check: ensure we respect the limit
     jobsToPost = jobsToPost.slice(0, config.postsPerBatch);
