@@ -914,41 +914,55 @@ async function fetchWorkdayJobs() {
   const allJobs = [];
 
   for (const company of WORKDAY_COMPANIES) {
-    try {
-      const url = `https://${company.tenant}.${company.host}.myworkdayjobs.com/wday/cxs/${company.tenant}/${company.site}/jobs`;
-      const payload = {
-        "appliedFacets": {},
-        "limit": 50,
-        "offset": 0,
-        "searchText": ""
-      };
+    // Workday API constraints: Max 20 jobs per request.
+    // We will fetch 3 pages (Offsets: 0, 20, 40) to get ~60 jobs.
+    const OFFSETS = [0, 20, 40];
 
-      const response = await axios.post(url, payload, {
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        timeout: 10000
-      });
+    for (const offset of OFFSETS) {
+      try {
+        const url = `https://${company.tenant}.${company.host}.myworkdayjobs.com/wday/cxs/${company.tenant}/${company.site}/jobs`;
+        const payload = {
+          "appliedFacets": {},
+          "limit": 20,
+          "offset": offset,
+          "searchText": ""
+        };
 
-      const jobs = response.data.jobPostings || [];
-
-      for (const job of jobs) {
-        const fullUrl = `https://${company.tenant}.${company.host}.myworkdayjobs.com/${company.site}${job.externalPath}`;
-
-        // Construct description from potential fields
-        const desc = job.bulletFields ? job.bulletFields.join(' ') : job.title;
-
-        allJobs.push({
-          id: `workday-${company.tenant}-${job.bulletFields ? job.bulletFields[0] : job.externalPath.replace(/\//g, '-')}`,
-          title: job.title,
-          company: company.name,
-          location: job.locationsText || 'Unknown',
-          description: desc,
-          url: fullUrl,
-          publishedAt: job.postedOn,
-          source: 'Workday'
+        const response = await axios.post(url, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            // IMPORTANT: Browser UA required to avoid blocking
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          },
+          timeout: 10000
         });
+
+        const jobs = response.data.jobPostings || [];
+
+        if (jobs.length === 0) break; // Stop if no more jobs
+
+        for (const job of jobs) {
+          const fullUrl = `https://${company.tenant}.${company.host}.myworkdayjobs.com/${company.site}${job.externalPath}`;
+
+          // Construct description from potential fields
+          const desc = job.bulletFields ? job.bulletFields.join(' ') : job.title;
+
+          allJobs.push({
+            id: `workday-${company.tenant}-${job.bulletFields ? job.bulletFields[0] : job.externalPath.replace(/\//g, '-')}`,
+            title: job.title,
+            company: company.name,
+            location: job.locationsText || 'Unknown',
+            description: desc,
+            url: fullUrl,
+            publishedAt: job.postedOn,
+            source: 'Workday'
+          });
+        }
+      } catch (e) {
+        console.error(`Error fetching Workday for ${company.name} (Offset ${offset}): ${e.message}`);
+        // Continue to next page or company
       }
-    } catch (e) {
-      console.error(`Error fetching Workday for ${company.name}: ${e.message}`);
     }
   }
   return allJobs;
@@ -1016,7 +1030,11 @@ async function fetchAndPostJobs() {
     // Sort final selection by priority
     jobsToPost.sort((a, b) => b.priority - a.priority);
 
-    console.log(`📤 Posting ${jobsToPost.length} jobs(${selectedFT.length} FT, ${selectedIntern.length} Interns)...`);
+    // Count types for logging
+    const internCount = jobsToPost.filter(j => j.title.toLowerCase().includes('intern')).length;
+    const ftCount = jobsToPost.length - internCount;
+
+    console.log(`📤 Posting ${jobsToPost.length} jobs(${ftCount} FT, ${internCount} Interns)...`);
 
     for (const job of jobsToPost) {
       await postJobToChannel(job, job.priority);
