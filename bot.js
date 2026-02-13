@@ -632,8 +632,12 @@ function calculateJobPriority(job) {
 
 // Filter jobs based on keywords
 function filterJobs(jobs) {
-  // Seniority Keywords for HARD REJECTION
-  const SENIOR_KEYWORDS = ['senior', 'sr', 'staff', 'principal', 'lead', 'architect', 'director', 'head', 'vp', 'chief'];
+  // Seniority Keywords for HARD REJECTION (Expanded list)
+  const SENIOR_KEYWORDS = [
+    'senior', 'sr', 'staff', 'principal', 'lead', 'architect', 'director', 'head', 'vp', 'chief',
+    'engineer iii', 'engineer iv', 'engineer 3', 'engineer 4',
+    'manager', 'engineering manager', 'product manager', 'project manager', 'program manager', 'delivery manager'
+  ];
 
   // Experience Regex for 5+ years (Matches "5+ years", "6 years", "10+ years")
   const EXPERIENCE_REGEX = /\b(5|6|7|8|9|10|\d{2,})\+?\s*years?/i;
@@ -653,7 +657,7 @@ function filterJobs(jobs) {
     // 1. HARD REJECT SENIOR ROLES
     const isSeniorInTitle = SENIOR_KEYWORDS.some(keyword => titleLower.includes(keyword));
     if (isSeniorInTitle) {
-      console.log(`❌ Rejected (Senior): ${job.title}`);
+      console.log(`❌ Rejected (Senior/Manager): ${job.title}`);
       return false;
     }
 
@@ -663,9 +667,11 @@ function filterJobs(jobs) {
       return false;
     }
 
-    // 3. EXCLUDE KEYWORDS (Standard)
+    // 3. EXCLUDE KEYWORDS (Standard) - CHECK TITLE AND COMPANY ONLY
+    // We intentionally ignore description to avoid false positives (e.g. "Work with marketing team")
+    const excludeCheckText = `${titleLower} ${companyLower}`;
     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(keyword =>
-      combinedText.includes(keyword.toLowerCase())
+      excludeCheckText.includes(keyword.toLowerCase())
     );
     if (hasExcludeKeyword) {
       console.log(`❌ Rejected (Excluded): ${job.title}`);
