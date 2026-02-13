@@ -276,6 +276,7 @@ async function savePostedJobs() {
 // Fetch jobs from Remotive API
 async function fetchRemotiveJobs() {
   try {
+    console.log('🌍 Fetching Remotive jobs...');
     // Use category filtering at API level for software development jobs only
     const response = await axios.get('https://remotive.com/api/remote-jobs', {
       params: {
@@ -285,7 +286,7 @@ async function fetchRemotiveJobs() {
       timeout: 10000
     });
 
-    return response.data.jobs.map(job => ({
+    const jobs = response.data.jobs.map(job => ({
       id: `remotive_${job.id}`,
       title: job.title,
       company: job.company_name,
@@ -297,6 +298,9 @@ async function fetchRemotiveJobs() {
       publishedAt: job.publication_date,
       source: 'Remotive'
     }));
+
+    console.log(`  - [Remotive] fetched ${jobs.length} jobs`);
+    return jobs;
   } catch (error) {
     console.error('Error fetching Remotive jobs:', error.message);
     return [];
@@ -983,6 +987,15 @@ async function fetchAndPostJobs() {
       fetchSmartRecruitersJobs(),
       fetchWorkdayJobs()
     ]);
+
+    console.log(`Sources summary:
+Remotive: ${remotiveJobs.length}
+WeWorkRemotely: ${weworkremotelyJobs.length}
+Unstop: ${unstopJobs.length}
+Greenhouse: ${greenhouseJobs.length}
+Lever: ${leverJobs.length}
+SmartRecruiters: ${smartRecruitersJobs.length}
+Workday: ${workdayJobs.length}`);
 
     // Combine and filter
     const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs, ...leverJobs, ...smartRecruitersJobs, ...workdayJobs];
