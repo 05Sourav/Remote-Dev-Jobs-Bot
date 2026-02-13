@@ -25,7 +25,7 @@ const config = {
 // Strong technical keywords - REQUIRED for job acceptance
 const TECHNICAL_KEYWORDS = [
   // Core roles (must have one of these)
-  'developer', 'engineer', 'programmer', 'coder', 'software',
+  'developer', 'programmer', 'coder', 'software',
 
   // Specializations
   'frontend', 'backend', 'full stack', 'fullstack', 'full-stack',
@@ -42,8 +42,11 @@ const TECHNICAL_KEYWORDS = [
   'blockchain developer', 'web3 developer',
 
   // QA/Testing (technical)
-  'qa engineer', 'qa automation', 'test engineer', 'sdet',
-  'automation engineer', 'test automation',
+  'qa', 'qa engineer', 'qa automation', 'test engineer', 'sdet',
+  'automation engineer', 'test automation', 'testing',
+
+  // Allowed specific roles
+  'forward deployed',
 
   // Explicit technical terms
   'software development', 'software engineering', 'application developer',
@@ -629,6 +632,12 @@ function calculateJobPriority(job) {
 
 // Filter jobs based on keywords
 function filterJobs(jobs) {
+  // Seniority Keywords for HARD REJECTION
+  const SENIOR_KEYWORDS = ['senior', 'sr', 'staff', 'principal', 'lead', 'architect', 'director', 'head', 'vp', 'chief'];
+
+  // Experience Regex for 5+ years (Matches "5+ years", "6 years", "10+ years")
+  const EXPERIENCE_REGEX = /\b(5|6|7|8|9|10|\d{2,})\+?\s*years?/i;
+
   return jobs.filter(job => {
     const titleLower = job.title.toLowerCase();
     const descLower = (job.description || '').toLowerCase();
@@ -641,20 +650,38 @@ function filterJobs(jobs) {
       return false;
     }
 
-    // Check for exclude keywords first (check Title + Description + Company)
+    // 1. HARD REJECT SENIOR ROLES
+    const isSeniorInTitle = SENIOR_KEYWORDS.some(keyword => titleLower.includes(keyword));
+    if (isSeniorInTitle) {
+      console.log(`❌ Rejected (Senior): ${job.title}`);
+      return false;
+    }
+
+    // 2. HARD REJECT HIGH EXPERIENCE (> 5 years)
+    if (EXPERIENCE_REGEX.test(titleLower) || EXPERIENCE_REGEX.test(descLower)) {
+      console.log(`❌ Rejected (Experience): ${job.title}`);
+      return false;
+    }
+
+    // 3. EXCLUDE KEYWORDS (Standard)
     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(keyword =>
       combinedText.includes(keyword.toLowerCase())
     );
     if (hasExcludeKeyword) {
+      console.log(`❌ Rejected (Excluded): ${job.title}`);
       return false;
     }
 
-    // Must match at least one STRONG technical keyword in the TITLE
-    // We restrict this to TITLE ONLY to avoid false positives where a "Content Intern" 
-    // description mentions "working with software team".
+    // 4. MUST MATCH STRICT TECHNICAL KEYWORDS
+    // 'engineer' removed from sufficient list. Must have context (Software, Backend, QA, etc.)
     const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some(keyword =>
       titleLower.includes(keyword.toLowerCase())
     );
+
+    if (!hasTechnicalKeyword) {
+      console.log(`❌ Rejected (Non-tech): ${job.title}`);
+      return false;
+    }
 
     // STRICT LOCATION FILTER: Must be Remote OR in India
     const locationLower = job.location.toLowerCase();
@@ -670,18 +697,13 @@ function filterJobs(jobs) {
     const isRemote = locationLower.includes('remote');
 
     // Allow job ONLY if: isIndia OR (isRemote AND isGlobalRemote)
-    if (isIndia) {
-      return hasTechnicalKeyword;
-    }
-
-    if (isRemote && isGlobalRemote) {
-      return hasTechnicalKeyword;
+    if (isIndia || (isRemote && isGlobalRemote)) {
+      return true;
     }
 
     // Reject everything else (Regional remote, generic remote without global keywords, non-India)
+    console.log(`❌ Rejected (Location): ${job.title} | ${job.location}`);
     return false;
-
-    return hasTechnicalKeyword;
   });
 }
 
