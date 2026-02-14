@@ -727,6 +727,30 @@ function filterJobs(jobs) {
 
 // Format job message for Telegram
 function formatJobMessage(job, priority = 0) {
+  // Apply presentation normalizations (does not affect filtering)
+  const originalTitle = job.title;
+  const originalType = job.type;
+
+  // 1. Clean Title
+  job.title = cleanJobTitle(job.title);
+
+  // 2. Infer Type if missing
+  if (!job.type || job.type === 'undefined') {
+    job.type = inferJobType(job);
+  }
+
+  // Debug log for transformations (once per cycle to avoid spam, but here we just log significant changes)
+  if (originalTitle !== job.title) {
+    console.log(`✨ Fixed Title: "${originalTitle}" -> "${job.title}"`);
+  }
+  if (!originalType || originalType === 'undefined') {
+    console.log(`✨ Inferred Type: "${job.type}" for "${job.title}"`);
+  }
+
+  // 3. Normalize Company & Location
+  job.company = normalizeCompany(job.company);
+  job.location = normalizeLocation(job.location);
+
   const emoji = getJobEmoji(job);
   const hotBadge = priority >= 50 ? '🔥 HOT ' : '';
   const salaryText = job.salary ? job.salary.trim() : 'Not disclosed';
@@ -752,19 +776,25 @@ ${hashtags}`;
 
 // Generate hashtags based on job details
 function generateHashtags(job) {
-  const tags = ['#RemoteJobs', '#DeveloperJobs'];
+  const tags = ['#DeveloperJobs']; // Always include this
   const searchText = `${job.title} ${job.description || ''} `.toLowerCase();
+  const titleLower = job.title.toLowerCase();
 
-  // Job level tags
-  if (searchText.includes('intern')) {
-    tags.push('#Internships', '#EntryLevel');
-  } else if (searchText.includes('junior') || searchText.includes('trainee') || searchText.includes('entry')) {
-    tags.push('#JuniorDev', '#CareerStart');
-  } else if (searchText.includes('senior') || searchText.includes('lead')) {
+  // Job level tags - STRICTER LOGIC
+  // #Internships: Only if title explicitly mentions it
+  if (titleLower.includes('intern')) {
+    tags.push('#Internships');
+  }
+  // #JuniorDev: Only for junior/entry/trainee in TITLE
+  else if (titleLower.includes('junior') || titleLower.includes('trainee') || titleLower.includes('entry') || titleLower.includes('graduate')) {
+    tags.push('#JuniorDev', '#EntryLevel');
+  }
+  // #SeniorDev: Only for senior/lead/principal in TITLE
+  else if (titleLower.includes('senior') || titleLower.includes('lead') || titleLower.includes('principal') || titleLower.includes('staff')) {
     tags.push('#SeniorDev', '#Experienced');
   }
 
-  // Technology tags
+  // Technology tags - Check Title & Description
   const techTags = {
     'python': '#Python',
     'javascript': '#JavaScript',
@@ -781,17 +811,99 @@ function generateHashtags(job) {
     'full stack': '#FullStack',
     'mobile': '#Mobile',
     'android': '#Android',
-    'ios': '#iOS'
+    'ios': '#iOS',
+    'rub': '#Ruby',
+    'rails': '#RubyOnRails',
+    'c++': '#Cpp',
+    'c#': '#CSharp',
+    '.net': '#DotNet',
+    'aws': '#AWS',
+    'azure': '#Azure',
+    'docker': '#Docker',
+    'kubernetes': '#Kubernetes'
   };
 
   for (const [keyword, tag] of Object.entries(techTags)) {
+    // Basic word boundary check or inclusion
     if (searchText.includes(keyword) && !tags.includes(tag)) {
       tags.push(tag);
-      if (tags.length >= 8) break; // Limit to 8 tags total
+      if (tags.length >= 7) break; // Limit to 7 tags total
     }
   }
 
-  return tags.join(' ');
+  // Add generic remote/job type tags if space permits
+  if (tags.length < 7) {
+    if (job.location.toLowerCase().includes('remote')) tags.push('#RemoteJobs');
+    if (job.type.toLowerCase() === 'full-time') tags.push('#FullTime');
+  }
+
+  return tags.slice(0, 7).join(' '); // Final safely-limit
+}
+
+// --- Presentation Helper Functions ---
+
+function cleanJobTitle(title) {
+  if (!title) return 'Software Engineer';
+
+  let cleaned = title
+    .replace(/_/g, ' ') // Replace underscores
+    .replace(/\s+/g, ' ') // Collapse spaces
+    .trim();
+
+  // Convert all-caps or weird-caps words (heuristic)
+  // We won't strictly lowercase everything to preserve acronyms like 'AWS', 'PHP'
+  // But we can Capitalize Words if the whole string is uppercase
+  if (cleaned === cleaned.toUpperCase() && cleaned.length > 4) {
+    cleaned = cleaned.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // Remove common separators at the end
+  cleaned = cleaned.replace(/[-|:;,]+$/, '').trim();
+
+  // Format specific "Title_Tech" patterns to "Title (Tech)"
+  // e.g., "Software Engineer Python" -> "Software Engineer (Python)" if it looks like a suffix
+  // This is hard to generalize perfectly without NLP, so we'll stick to basic cleanup.
+
+  return cleaned;
+}
+
+function inferJobType(job) {
+  const text = `${job.title} ${job.description || ''}`.toLowerCase();
+
+  if (text.includes('intern') || text.includes('internship')) return 'Internship';
+  if (text.includes('contract') || text.includes('freelance')) return 'Contract';
+  if (text.includes('part-time') || text.includes('part time')) return 'Part-time';
+
+  return 'Full-time'; // Default safe fallback
+}
+
+function normalizeCompany(company) {
+  if (!company) return 'Unknown Company';
+  let cleaned = company.trim();
+
+  // Fix specific messy cases
+  if (cleaned.toLowerCase() === 'dell technologies ltd') return 'Dell Technologies';
+  if (cleaned.toLowerCase() === 'boschgroup') return 'Bosch';
+  if (cleaned.toLowerCase().includes('capgemini')) return 'Capgemini';
+
+  // Generic Title Case for all-caps
+  if (cleaned === cleaned.toUpperCase() && cleaned.length > 3) {
+    cleaned = cleaned.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  return cleaned;
+}
+
+function normalizeLocation(location) {
+  if (!location) return 'Remote';
+  let cleaned = location.replace(/\b, in\b/yi, ', India').replace(/\b, in\./yi, ', India');
+
+  if (cleaned.match(/^bangalore/i)) cleaned = 'Bangalore, India';
+  if (cleaned.match(/^bengaluru/i)) cleaned = 'Bangalore, India';
+  if (cleaned.match(/^pune/i)) cleaned = 'Pune, India';
+  if (cleaned.match(/^hyderabad/i)) cleaned = 'Hyderabad, India';
+
+  return cleaned;
 }
 
 // Get appropriate emoji based on job type/title
