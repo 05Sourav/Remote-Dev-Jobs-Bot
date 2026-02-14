@@ -1,0 +1,108 @@
+{
+  "smartRecruiters": [
+    {
+      "id": "Visa",
+      "name": "Visa",
+      "count": 1156
+    },
+    {
+      "id": "BlockRecruit",
+      "name": "Block",
+      "count": 25
+    },
+    {
+      "id": "Colliers",
+      "name": "Colliers",
+      "count": 114
+    },
+    {
+      "id": "Eurofins",
+      "name": "Eurofins",
+      "count": 2571
+    },
+    {
+      "id": "Gameloft",
+      "name": "Gameloft",
+      "count": 75
+    },
+    {
+      "id": "JYSK",
+      "name": "JYSK",
+      "count": 2842
+    },
+    {
+      "id": "Tipico",
+      "name": "Tipico",
+      "count": 266
+    },
+    {
+      "id": "Xplor",
+      "name": "Xplor Technologies",
+      "count": 267
+    },
+    {
+      "id": "Equinox",
+      "name": "Equinox",
+      "count": 640
+    },
+    {
+      "id": "ChristianBrothersAutomotive",
+      "name": "Christian Brothers Automotive",
+      "count": 540
+    },
+    {
+      "id": "Accor",
+      "name": "Accor",
+      "count": 409
+    },
+    {
+      "id": "BoschGroup",
+      "name": "Bosch",
+      "count": 3987
+    }
+  ],
+  "workday": [
+    {
+      "name": "Dell",
+      "tenant": "dell",
+      "site": "External",
+      "host": "wd1"
+    },
+    {
+      "name": "Adobe",
+      "tenant": "adobe",
+      "site": "external_experienced",
+      "host": "wd5"
+    },
+    {
+      "name": "Salesforce",
+      "tenant": "salesforce",
+      "site": "External_Career_Site",
+      "host": "wd12"
+    },
+    {
+      "name": "Nvidia",
+      "tenant": "nvidia",
+      "site": "NVIDIAExternalCareerSite",
+      "host": "wd5"
+    },
+    {
+      "name": "HP",
+      "tenant": "hp",
+      "site": "ExternalCareerSite",
+      "host": "wd5"
+    },
+    {
+      "name": "Mastercard",
+      "tenant": "mastercard",
+      "site": "CorporateCareers",
+      "host": "wd1"
+    },
+    {
+      "name": "Workday",
+      "tenant": "workday",
+      "site": "Workday",
+      "host": "wd5"
+    }
+  ]
+}

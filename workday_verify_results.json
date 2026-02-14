@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Micron",
+    "tenant": "micron",
+    "site": "External",
+    "host": "wd1"
+  },
+  {
+    "name": "Morgan Stanley",
+    "tenant": "ms",
+    "site": "External",
+    "host": "wd5"
+  }
+]

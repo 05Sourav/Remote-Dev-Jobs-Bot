@@ -228,7 +228,9 @@ const TOP_TIER_COMPANIES = [
   'webflow', 'cred',
   // Expanded List
   'amazon', 'nvidia', 'qualcomm', 'adobe', 'paypal', 'intel',
-  'servicenow', 'visa', 'mastercard'
+  'servicenow', 'visa', 'mastercard', 'salesforce', 'hp', 'dell',
+  'square', 'block', 'intuit', 'crowdstrike', 'palo alto networks', 'vmware',
+  'micron'
 ];
 
 // Mid Tier Companies (+5 Bonus)
@@ -237,7 +239,9 @@ const GOOD_COMPANIES = [
   'zoox', 'shieldai', 'rackspace', 'ciandt', 'houzz',
   // Expanded List
   'bosch', 'siemens', 'dell', 'ericsson', 'infineon', 'capgemini',
-  'schneider', 'honeywell', 'nokia', 'western digital', 'publicis'
+  'schneider', 'honeywell', 'nokia', 'western digital', 'publicis',
+  'colliers', 'eurofins', 'gameloft', 'autodesk', 'sony', 'electronic arts', 'ea',
+  'morgan stanley'
 ];
 
 // Initialize bot (polling disabled for production - cron-based bot doesn't need it)
