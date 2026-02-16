@@ -1,268 +1,556 @@
 ﻿// Load environment variables from .env file
-require('dotenv').config();
+require("dotenv").config();
 
-const TelegramBot = require('node-telegram-bot-api');
-const cron = require('node-cron');
-const axios = require('axios');
-const Parser = require('rss-parser');
-const fs = require('fs').promises;
-const path = require('path');
-const cronParser = require('cron-parser');
-const express = require('express');
-const GREENHOUSE_COMPANIES = require('./greenhouseCompanies');
-const LEVER_COMPANIES = require('./leverCompanies');
-const SMARTRECRUITERS_COMPANIES = require('./smartRecruitersCompanies');
-const WORKDAY_COMPANIES = require('./workdayCompanies');
+const TelegramBot = require("node-telegram-bot-api");
+const cron = require("node-cron");
+const axios = require("axios");
+const Parser = require("rss-parser");
+const fs = require("fs").promises;
+const path = require("path");
+const cronParser = require("cron-parser");
+const express = require("express");
+const GREENHOUSE_COMPANIES = require("./greenhouseCompanies");
+const LEVER_COMPANIES = require("./leverCompanies");
+const SMARTRECRUITERS_COMPANIES = require("./smartRecruitersCompanies");
+const WORKDAY_COMPANIES = require("./workdayCompanies");
 
 // Configuration
 const config = {
   botToken: process.env.TELEGRAM_BOT_TOKEN,
   channelId: process.env.TELEGRAM_CHANNEL_ID,
   adminId: process.env.ADMIN_TELEGRAM_ID,
-  postsPerBatch: parseInt(process.env.POSTS_PER_BATCH || '5'),
-  cronSchedule: process.env.CRON_SCHEDULE || '0 */3 * * *', // Every 3 hours by default
-  port: parseInt(process.env.PORT || '3000'), // For Render health checks
+  postsPerBatch: parseInt(process.env.POSTS_PER_BATCH || "5"),
+  cronSchedule: process.env.CRON_SCHEDULE || "0 */3 * * *", // Every 3 hours by default
+  port: parseInt(process.env.PORT || "3000"), // For Render health checks
 };
 
 // Strong technical keywords - REQUIRED for job acceptance
 const TECHNICAL_KEYWORDS = [
   // Core roles (must have one of these)
-  'developer', 'programmer', 'coder', 'software',
+  "developer",
+  "programmer",
+  "coder",
+  "software",
 
   // Specializations
-  'frontend', 'backend', 'full stack', 'fullstack', 'full-stack',
-  'mobile', 'android', 'ios', 'web developer', 'embedded', 'firmware',
+  "frontend",
+  "backend",
+  "full stack",
+  "fullstack",
+  "full-stack",
+  "mobile",
+  "android",
+  "ios",
+  "web developer",
+  "embedded",
+  "firmware",
 
   // SDE variations
-  'sde', 'sde1', 'sde2', 'sde3', 'sde-1', 'sde-2', 'sde-3', 'sde 1', 'sde 2',
+  "sde",
+  "sde1",
+  "sde2",
+  "sde3",
+  "sde-1",
+  "sde-2",
+  "sde-3",
+  "sde 1",
+  "sde 2",
 
   // Specific engineering roles
-  'devops', 'devsecops', 'sre', 'site reliability',
-  'data engineer', 'ml engineer', 'machine learning engineer', 'ai engineer',
-  'cloud engineer', 'platform engineer', 'systems engineer',
-  'infrastructure engineer', 'security engineer',
-  'blockchain developer', 'web3 developer',
+  "devops",
+  "devsecops",
+  "sre",
+  "site reliability",
+  "data engineer",
+  "ml engineer",
+  "machine learning engineer",
+  "ai engineer",
+  "cloud engineer",
+  "platform engineer",
+  "systems engineer",
+  "infrastructure engineer",
+  "security engineer",
+  "blockchain developer",
+  "web3 developer",
 
   // QA/Testing (technical)
-  'qa', 'qa engineer', 'qa automation', 'test engineer', 'sdet',
-  'automation engineer', 'test automation', 'testing',
+  "qa",
+  "qa engineer",
+  "qa automation",
+  "test engineer",
+  "sdet",
+  "automation engineer",
+  "test automation",
+  "testing",
 
   // Allowed specific roles
-  'forward deployed',
+  "forward deployed",
 
   // Explicit technical terms
-  'software development', 'software engineering', 'application developer',
-  'app developer', 'game developer',
+  "software development",
+  "software engineering",
+  "application developer",
+  "app developer",
+  "game developer",
 
   // Languages & Frameworks (Accepted as technical keywords)
-  'react', 'angular', 'vue', 'node', 'nodejs', 'express',
-  'python', 'django', 'flask', 'java', 'spring', 'kotlin',
-  'javascript', 'typescript', 'c++', 'golang', 'rust', 'ruby', 'rails',
-  'php', 'laravel', 'dotnet', '.net', 'c#', 'swift', 'flutter',
+  "react",
+  "angular",
+  "vue",
+  "node",
+  "nodejs",
+  "express",
+  "python",
+  "django",
+  "flask",
+  "java",
+  "spring",
+  "kotlin",
+  "javascript",
+  "typescript",
+  "c++",
+  "golang",
+  "rust",
+  "ruby",
+  "rails",
+  "php",
+  "laravel",
+  "dotnet",
+  ".net",
+  "c#",
+  "swift",
+  "flutter",
 
   // Technologies (Accepted as technical keywords)
-  'api', 'rest', 'graphql', 'microservices', 'kubernetes', 'docker',
-  'aws', 'azure', 'gcp', 'cloud', 'serverless',
-  'database', 'sql', 'nosql', 'mongodb', 'postgresql', 'redis',
-  'blockchain', 'smart contract', 'solidity', 'web3'
+  "api",
+  "rest",
+  "graphql",
+  "microservices",
+  "kubernetes",
+  "docker",
+  "aws",
+  "azure",
+  "gcp",
+  "cloud",
+  "serverless",
+  "database",
+  "sql",
+  "nosql",
+  "mongodb",
+  "postgresql",
+  "redis",
+  "blockchain",
+  "smart contract",
+  "solidity",
+  "web3",
 ];
 
 // Stricter keywords for Greenhouse to ensure high quality
 const GREENHOUSE_KEYWORDS = [
-  'software', 'engineer', 'developer', 'backend', 'frontend', 'full stack', 'fullstack',
-  'platform', 'infrastructure', 'systems', 'mobile', 'android', 'ios', 'machine learning', 'ai engineer'
+  "software",
+  "engineer",
+  "developer",
+  "backend",
+  "frontend",
+  "full stack",
+  "fullstack",
+  "platform",
+  "infrastructure",
+  "systems",
+  "mobile",
+  "android",
+  "ios",
+  "machine learning",
+  "ai engineer",
 ];
 
 // Exclude non-technical roles
 const EXCLUDE_KEYWORDS = [
   // Content & Marketing
-  'writer', 'content writer', 'content creator', 'copywriter', 'editor',
-  'marketing', 'seo', 'sem', 'social media', 'brand manager',
-  'influencer', 'blogger', 'journalist',
-  'marketing intern', 'marketing internship',
-  'content creation', 'digital marketing', 'social media manager',
+  "writer",
+  "content writer",
+  "content creator",
+  "copywriter",
+  "editor",
+  "marketing",
+  "seo",
+  "sem",
+  "social media",
+  "brand manager",
+  "influencer",
+  "blogger",
+  "journalist",
+  "marketing intern",
+  "marketing internship",
+  "content creation",
+  "digital marketing",
+  "social media manager",
 
   // Sales & Business
-  'sales', 'account executive', 'business development', 'sales representative',
-  'account manager', 'relationship manager',
-  'business development intern', 'sales intern',
+  "sales",
+  "account executive",
+  "business development",
+  "sales representative",
+  "account manager",
+  "relationship manager",
+  "business development intern",
+  "sales intern",
 
   // Design (non-engineering)
-  'graphic designer', 'ui/ux designer', 'ux designer', 'ui designer',
-  'visual designer', 'illustrator', 'animator', 'video editor',
-  'product designer',
+  "graphic designer",
+  "ui/ux designer",
+  "ux designer",
+  "ui designer",
+  "visual designer",
+  "illustrator",
+  "animator",
+  "video editor",
+  "product designer",
 
   // Management (non-technical)
-  'product manager', 'project manager', 'program manager', 'portfolio manager',
-  'operations manager', 'general manager', 'office manager',
-  'scrum master', 'agile coach', 'delivery manager',
+  "product manager",
+  "project manager",
+  "program manager",
+  "portfolio manager",
+  "operations manager",
+  "general manager",
+  "office manager",
+  "scrum master",
+  "agile coach",
+  "delivery manager",
 
   // Support & Admin
-  'customer support', 'customer service', 'customer success',
-  'technical support', 'help desk', 'support specialist',
-  'data entry', 'administrative', 'receptionist', 'assistant',
+  "customer support",
+  "customer service",
+  "customer success",
+  "technical support",
+  "help desk",
+  "support specialist",
+  "data entry",
+  "administrative",
+  "receptionist",
+  "assistant",
 
   // HR & Recruiting
-  'recruiter', 'talent acquisition', 'hr', 'human resources',
-  'hr manager', 'people operations', 'talent partner',
-  'hr intern', 'hr internship',
+  "recruiter",
+  "talent acquisition",
+  "hr",
+  "human resources",
+  "hr manager",
+  "people operations",
+  "talent partner",
+  "hr intern",
+  "hr internship",
 
   // Finance & Legal
-  'accountant', 'bookkeeper', 'financial analyst', 'finance',
-  'controller', 'treasurer', 'auditor', 'audit', 'compliance',
-  'legal', 'lawyer', 'attorney', 'paralegal',
-  'investment analyst', 'investment', 'equity analyst', 'portfolio',
-  'wealth management', 'asset management', 'trading', 'trader',
+  "accountant",
+  "bookkeeper",
+  "financial analyst",
+  "finance",
+  "controller",
+  "treasurer",
+  "auditor",
+  "audit",
+  "compliance",
+  "legal",
+  "lawyer",
+  "attorney",
+  "paralegal",
+  "investment analyst",
+  "investment",
+  "equity analyst",
+  "portfolio",
+  "wealth management",
+  "asset management",
+  "trading",
+  "trader",
 
   // Analysis (non-technical)
-  'business analyst', 'data analyst', 'market research',
-  'strategy analyst', 'consultant', 'advisor', 'consulting',
+  "business analyst",
+  "data analyst",
+  "market research",
+  "strategy analyst",
+  "consultant",
+  "advisor",
+  "consulting",
 
   // Data annotation/labeling
-  'rater', 'annotator', 'labeler', 'data labeling', 'data annotation',
-  'moderator', 'reviewer', 'evaluator',
+  "rater",
+  "annotator",
+  "labeler",
+  "data labeling",
+  "data annotation",
+  "moderator",
+  "reviewer",
+  "evaluator",
 
   // Campus & Events (NEW - high priority exclusions)
-  'ambassador', 'campus ambassador', 'student ambassador', 'brand ambassador',
-  'career fair', 'job fair', 'hiring event', 'recruitment event',
-  'event', 'competition', 'hackathon organizer', 'campus representative',
-  'fellowship', 'campus program', 'student program',
+  "ambassador",
+  "campus ambassador",
+  "student ambassador",
+  "brand ambassador",
+  "career fair",
+  "job fair",
+  "hiring event",
+  "recruitment event",
+  "event",
+  "competition",
+  "hackathon organizer",
+  "campus representative",
+  "fellowship",
+  "campus program",
+  "student program",
 
   // Other
-  'community manager', 'event coordinator', 'trainer', 'instructor',
-  'teacher', 'tutor', 'coach'
+  "community manager",
+  "event coordinator",
+  "trainer",
+  "instructor",
+  "teacher",
+  "tutor",
+  "coach",
 ];
 
 // Priority keywords for entry-level roles
 const PRIORITY_KEYWORDS = [
-  'internship',
-  'intern',
-  'junior',
-  'trainee',
-  'entry level',
-  'entry-level',
-  'graduate',
-  'fresher',
-  'new grad',
-  'sde1',
-  'sde-1',
-  'sde 1',
-  'associate',
-  'early career',
-  '0-1 years',
-  '0-2 years',
-  'campus'
+  "internship",
+  "intern",
+  "junior",
+  "trainee",
+  "entry level",
+  "entry-level",
+  "graduate",
+  "fresher",
+  "new grad",
+  "sde1",
+  "sde-1",
+  "sde 1",
+  "associate",
+  "early career",
+  "0-1 years",
+  "0-2 years",
+  "campus",
 ];
 
 // Location-restricted keywords to exclude
 // Allowed locations (India-based)
 const INDIA_LOCATIONS = [
-  'india', 'bangalore', 'bengaluru', 'delhi', 'new delhi', 'noida',
-  'gurgaon', 'gurugram', 'mumbai', 'pune', 'hyderabad', 'chennai',
-  'kolkata', 'ahmedabad', 'chandigarh', 'indore', 'jaipur', 'kochi',
-  'trivandrum', 'thiruvananthapuram', 'coimbatore'
+  "india",
+  "bangalore",
+  "bengaluru",
+  "delhi",
+  "new delhi",
+  "noida",
+  "gurgaon",
+  "gurugram",
+  "mumbai",
+  "pune",
+  "hyderabad",
+  "chennai",
+  "kolkata",
+  "ahmedabad",
+  "chandigarh",
+  "indore",
+  "jaipur",
+  "kochi",
+  "trivandrum",
+  "thiruvananthapuram",
+  "coimbatore",
 ];
 
 // Location-restricted keywords to exclude (Still useful for scoring penalties)
 const LOCATION_RESTRICTED_KEYWORDS = [
   // Germany-specific
-  'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'cologne',
-  'deutschsprachig', 'deutsch', 'german language',
+  "germany",
+  "berlin",
+  "munich",
+  "frankfurt",
+  "hamburg",
+  "cologne",
+  "deutschsprachig",
+  "deutsch",
+  "german language",
 
   // EU-specific
-  'europe only', 'eu only', 'european union', 'eu citizens',
-  'eu member states', 'schengen',
+  "europe only",
+  "eu only",
+  "european union",
+  "eu citizens",
+  "eu member states",
+  "schengen",
 
   // Other location restrictions
-  'us only', 'usa only', 'uk only', 'must be located',
-  'must be based', 'visa sponsorship required', 'work permit required',
-  'must reside', 'local candidates only'
+  "us only",
+  "usa only",
+  "uk only",
+  "must be located",
+  "must be based",
+  "visa sponsorship required",
+  "work permit required",
+  "must reside",
+  "local candidates only",
 ];
 
 // Language-specific patterns and keywords (non-English job markers)
 const LANGUAGE_PATTERNS = [
   // German patterns
-  '(m/w/d)', '(w/m/d)', '(m/f/d)', '(gn)', '(m/w/x)',
+  "(m/w/d)",
+  "(w/m/d)",
+  "(m/f/d)",
+  "(gn)",
+  "(m/w/x)",
 
   // French patterns and keywords
-  'développeur', 'développeuse', 'ingénieur', 'ingénieure',
-  'français requis', 'maîtrise du français', 'parlant français',
+  "développeur",
+  "développeuse",
+  "ingénieur",
+  "ingénieure",
+  "français requis",
+  "maîtrise du français",
+  "parlant français",
 
   // Spanish patterns and keywords
-  'desarrollador', 'desarrolladora', 'ingeniero', 'ingeniera',
-  'español requerido', 'dominio del español', 'hablante de español',
+  "desarrollador",
+  "desarrolladora",
+  "ingeniero",
+  "ingeniera",
+  "español requerido",
+  "dominio del español",
+  "hablante de español",
 
   // Portuguese patterns and keywords
-  'desenvolvedor', 'desenvolvedora', 'engenheiro', 'engenheira',
-  'português obrigatório', 'fluente em português',
+  "desenvolvedor",
+  "desenvolvedora",
+  "engenheiro",
+  "engenheira",
+  "português obrigatório",
+  "fluente em português",
 
   // Italian patterns and keywords
-  'sviluppatore', 'sviluppatrice', 'ingegnere',
-  'italiano richiesto', 'madrelingua italiana',
+  "sviluppatore",
+  "sviluppatrice",
+  "ingegnere",
+  "italiano richiesto",
+  "madrelingua italiana",
 
   // Dutch patterns and keywords
-  'ontwikkelaar', 'nederlandstalig', 'nederlands vereist',
+  "ontwikkelaar",
+  "nederlandstalig",
+  "nederlands vereist",
 
   // Polish patterns and keywords
-  'programista', 'inżynier', 'język polski wymagany',
+  "programista",
+  "inżynier",
+  "język polski wymagany",
 
   // General non-English indicators
-  'native speaker required', 'mother tongue', 'madrelingua',
-  'langue maternelle', 'lengua materna'
+  "native speaker required",
+  "mother tongue",
+  "madrelingua",
+  "langue maternelle",
+  "lengua materna",
 ];
 
 // Global remote indicators for priority boost
 const GLOBAL_REMOTE_KEYWORDS = [
-  'worldwide',
-  'anywhere',
-  'global',
-  'work from anywhere',
-  'location independent'
+  "worldwide",
+  "anywhere",
+  "global",
+  "work from anywhere",
+  "location independent",
 ];
-
 
 // Top Tier Companies (+10 Bonus)
 const TOP_TIER_COMPANIES = [
-  'stripe', 'airbnb', 'coinbase', 'figma', 'datadog', 'dropbox',
-  'plaid', 'lyft', 'asana', 'grammarly', 'brex', 'scaleai',
-  'webflow', 'cred',
+  "stripe",
+  "airbnb",
+  "coinbase",
+  "figma",
+  "datadog",
+  "dropbox",
+  "plaid",
+  "lyft",
+  "asana",
+  "grammarly",
+  "brex",
+  "scaleai",
+  "webflow",
+  "cred",
   // Expanded List
-  'amazon', 'nvidia', 'qualcomm', 'adobe', 'paypal', 'intel',
-  'servicenow', 'visa', 'mastercard', 'salesforce', 'hp', 'dell',
-  'square', 'block', 'intuit', 'crowdstrike', 'palo alto networks', 'vmware',
-  'micron'
+  "amazon",
+  "nvidia",
+  "qualcomm",
+  "adobe",
+  "paypal",
+  "intel",
+  "servicenow",
+  "visa",
+  "mastercard",
+  "salesforce",
+  "hp",
+  "dell",
+  "square",
+  "block",
+  "intuit",
+  "crowdstrike",
+  "palo alto networks",
+  "vmware",
+  "micron",
 ];
 
 // Mid Tier Companies (+5 Bonus)
 const GOOD_COMPANIES = [
-  'carta', 'gusto', 'calendly', 'coursera', 'hackerrank',
-  'zoox', 'shieldai', 'rackspace', 'ciandt', 'houzz',
+  "carta",
+  "gusto",
+  "calendly",
+  "coursera",
+  "hackerrank",
+  "zoox",
+  "shieldai",
+  "rackspace",
+  "ciandt",
+  "houzz",
   // Expanded List
-  'bosch', 'siemens', 'dell', 'ericsson', 'infineon', 'capgemini',
-  'schneider', 'honeywell', 'nokia', 'western digital', 'publicis',
-  'colliers', 'eurofins', 'gameloft', 'autodesk', 'sony', 'electronic arts', 'ea',
-  'morgan stanley'
+  "bosch",
+  "siemens",
+  "dell",
+  "ericsson",
+  "infineon",
+  "capgemini",
+  "schneider",
+  "honeywell",
+  "nokia",
+  "western digital",
+  "publicis",
+  "colliers",
+  "eurofins",
+  "gameloft",
+  "autodesk",
+  "sony",
+  "electronic arts",
+  "ea",
+  "morgan stanley",
 ];
 
 // Initialize bot (polling disabled for production - cron-based bot doesn't need it)
 const bot = new TelegramBot(config.botToken, { polling: false });
 
 // Storage for posted jobs (to prevent duplicates)
-const STORAGE_FILE = path.join(__dirname, 'posted_jobs.json');
+const STORAGE_FILE = path.join(__dirname, "posted_jobs.json");
 let postedJobs = new Set();
 
 // Load posted jobs from file
 async function loadPostedJobs() {
   try {
-    const data = await fs.readFile(STORAGE_FILE, 'utf8');
+    const data = await fs.readFile(STORAGE_FILE, "utf8");
     postedJobs = new Set(JSON.parse(data));
     console.log(`Loaded ${postedJobs.size} posted job IDs`);
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      console.log('No previous job history found, starting fresh');
+    if (error.code === "ENOENT") {
+      console.log("No previous job history found, starting fresh");
       postedJobs = new Set();
     } else {
-      console.error('Error loading posted jobs:', error);
+      console.error("Error loading posted jobs:", error);
     }
   }
 }
@@ -270,76 +558,79 @@ async function loadPostedJobs() {
 // Save posted jobs to file
 async function savePostedJobs() {
   try {
-    await fs.writeFile(STORAGE_FILE, JSON.stringify([...postedJobs]), 'utf8');
+    await fs.writeFile(STORAGE_FILE, JSON.stringify([...postedJobs]), "utf8");
     console.log(`Saved ${postedJobs.size} posted job IDs`);
   } catch (error) {
-    console.error('Error saving posted jobs:', error);
+    console.error("Error saving posted jobs:", error);
   }
 }
 
 // Fetch jobs from Remotive API
 async function fetchRemotiveJobs() {
   try {
-    console.log('🌍 Fetching Remotive jobs...');
+    console.log("🌍 Fetching Remotive jobs...");
     // Use category filtering at API level for software development jobs only
-    const response = await axios.get('https://remotive.com/api/remote-jobs', {
+    const response = await axios.get("https://remotive.com/api/remote-jobs", {
       params: {
         limit: 50,
-        category: 'software-dev' // API-level filtering for software development
+        category: "software-dev", // API-level filtering for software development
       },
-      timeout: 10000
+      timeout: 10000,
     });
 
-    const jobs = response.data.jobs.map(job => ({
+    const jobs = response.data.jobs.map((job) => ({
       id: `remotive_${job.id}`,
       title: job.title,
       company: job.company_name,
-      location: 'Remote',
-      type: job.job_type || 'Full-time',
+      location: "Remote",
+      type: job.job_type || "Full-time",
       salary: job.salary || null,
       url: job.url,
       description: job.description,
       publishedAt: job.publication_date,
-      source: 'Remotive'
+      source: "Remotive",
     }));
 
     console.log(`  - [Remotive] fetched ${jobs.length} jobs`);
     return jobs;
   } catch (error) {
-    console.error('Error fetching Remotive jobs:', error.message);
+    console.error("Error fetching Remotive jobs:", error.message);
     return [];
   }
 }
-
-
 
 // Fetch jobs from We Work Remotely RSS
 async function fetchWeWorkRemotelyJobs() {
   try {
     const parser = new Parser();
-    const feed = await parser.parseURL('https://weworkremotely.com/categories/remote-programming-jobs.rss');
+    const feed = await parser.parseURL(
+      "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+    );
 
-    return feed.items.map(item => {
+    return feed.items.map((item) => {
       // Extract company from title (format: "Company: Job Title")
-      const titleParts = item.title.split(':');
-      const company = titleParts.length > 1 ? titleParts[0].trim() : 'Unknown';
-      const title = titleParts.length > 1 ? titleParts.slice(1).join(':').trim() : item.title;
+      const titleParts = item.title.split(":");
+      const company = titleParts.length > 1 ? titleParts[0].trim() : "Unknown";
+      const title =
+        titleParts.length > 1
+          ? titleParts.slice(1).join(":").trim()
+          : item.title;
 
       return {
         id: `weworkremotely_${item.guid}`,
         title,
         company,
-        location: 'Remote',
-        type: 'Full-time',
+        location: "Remote",
+        type: "Full-time",
         salary: null,
         url: item.link,
-        description: item.contentSnippet || item.content || '',
+        description: item.contentSnippet || item.content || "",
         publishedAt: item.pubDate,
-        source: 'WeWorkRemotely'
+        source: "WeWorkRemotely",
       };
     });
   } catch (error) {
-    console.error('Error fetching WeWorkRemotely jobs:', error.message);
+    console.error("Error fetching WeWorkRemotely jobs:", error.message);
     return [];
   }
 }
@@ -347,51 +638,55 @@ async function fetchWeWorkRemotelyJobs() {
 // Fetch jobs from Unstop API
 async function fetchUnstopJobs() {
   try {
-    console.log('🔍 Fetching jobs and internships from Unstop...');
+    console.log("🔍 Fetching jobs and internships from Unstop...");
 
     // Fetch both jobs and internships in parallel
     const [jobsResponse, internshipsResponse] = await Promise.all([
       // Fetch jobs
-      axios.get('https://unstop.com/api/public/opportunity/search-result', {
+      axios.get("https://unstop.com/api/public/opportunity/search-result", {
         params: {
-          opportunity: 'jobs',
+          opportunity: "jobs",
           page: 1,
           per_page: 50,
-          sortBy: '',
-          orderBy: '',
-          filter_condition: ''
+          sortBy: "",
+          orderBy: "",
+          filter_condition: "",
         },
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://unstop.com/jobs'
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Accept: "application/json",
+          Referer: "https://unstop.com/jobs",
         },
-        timeout: 10000
+        timeout: 10000,
       }),
       // Fetch internships
-      axios.get('https://unstop.com/api/public/opportunity/search-result', {
+      axios.get("https://unstop.com/api/public/opportunity/search-result", {
         params: {
-          opportunity: 'internships',
+          opportunity: "internships",
           page: 1,
           per_page: 50,
-          sortBy: '',
-          orderBy: '',
-          filter_condition: ''
+          sortBy: "",
+          orderBy: "",
+          filter_condition: "",
         },
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://unstop.com/internships'
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Accept: "application/json",
+          Referer: "https://unstop.com/internships",
         },
-        timeout: 10000
-      })
+        timeout: 10000,
+      }),
     ]);
 
     const jobs = jobsResponse.data?.data?.data || [];
     const internships = internshipsResponse.data?.data?.data || [];
     const allOpportunities = [...jobs, ...internships];
 
-    console.log(`✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`);
+    console.log(
+      `✅ Fetched ${jobs.length} jobs and ${internships.length} internships from Unstop (${allOpportunities.length} total)`,
+    );
 
     // Allowed technical domains for Unstop (REMOVED: API doesn't return domain field reliably)
     // We will rely on the main filterJobs() function which uses rigorous keyword matching on title/description.
@@ -399,20 +694,24 @@ async function fetchUnstopJobs() {
     // Removed duplicate log
 
     // Transform to standard format
-    return allOpportunities.map(job => {
+    return allOpportunities.map((job) => {
       // Extract location from locations array
       const locations = job.locations || [];
-      const locationStr = locations.map(loc => loc.city).filter(Boolean).join(', ') || 'Remote';
+      const locationStr =
+        locations
+          .map((loc) => loc.city)
+          .filter(Boolean)
+          .join(", ") || "Remote";
 
       // Determine job type
-      let jobType = 'Full-time';
-      if (job.type === 'internships' || job.subtype === 'internship') {
-        jobType = 'Internship';
+      let jobType = "Full-time";
+      if (job.type === "internships" || job.subtype === "internship") {
+        jobType = "Internship";
       } else if (job.jobDetail?.timing) {
         const timing = job.jobDetail.timing;
-        if (timing === 'full_time') jobType = 'Full-time';
-        else if (timing === 'part_time') jobType = 'Part-time';
-        else if (timing === 'contract') jobType = 'Contract';
+        if (timing === "full_time") jobType = "Full-time";
+        else if (timing === "part_time") jobType = "Part-time";
+        else if (timing === "contract") jobType = "Contract";
       }
 
       // Extract salary if available
@@ -420,8 +719,8 @@ async function fetchUnstopJobs() {
       if (job.jobDetail?.show_salary && job.jobDetail?.min_salary) {
         const min = job.jobDetail.min_salary;
         const max = job.jobDetail.max_salary;
-        const currency = job.jobDetail.currency === 'fa-rupee' ? '₹' : '$';
-        const payIn = job.jobDetail.pay_in || 'monthly';
+        const currency = job.jobDetail.currency === "fa-rupee" ? "₹" : "$";
+        const payIn = job.jobDetail.pay_in || "monthly";
 
         if (max && max !== min) {
           salary = `${currency}${min}-${max}/${payIn}`;
@@ -431,35 +730,39 @@ async function fetchUnstopJobs() {
       }
 
       // Strip HTML from description
-      const description = job.details ? job.details.replace(/<[^>]*>/g, '').substring(0, 500) : job.title;
+      const description = job.details
+        ? job.details.replace(/<[^>]*>/g, "").substring(0, 500)
+        : job.title;
 
       return {
         id: `unstop_${job.id}`,
         title: job.title,
-        company: job.organisation?.name || 'Unknown Company',
+        company: job.organisation?.name || "Unknown Company",
         location: locationStr,
         type: jobType,
         salary: salary,
         url: `https://unstop.com/${job.public_url}`,
         description: description,
         publishedAt: job.updated_at || new Date().toISOString(),
-        source: 'Unstop'
+        source: "Unstop",
       };
     });
   } catch (error) {
-    console.error('Error fetching Unstop jobs:', error.message);
+    console.error("Error fetching Unstop jobs:", error.message);
     return [];
   }
 }
 
 // Fetch jobs from Greenhouse boards
 async function fetchGreenhouseJobs() {
-  console.log('🌱 Fetching Greenhouse jobs...');
+  console.log("🌱 Fetching Greenhouse jobs...");
   const allJobs = [];
 
   for (const company of GREENHOUSE_COMPANIES) {
     try {
-      const response = await axios.get(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs`);
+      const response = await axios.get(
+        `https://boards-api.greenhouse.io/v1/boards/${company}/jobs`,
+      );
       const jobs = response.data.jobs || [];
       const totalRaw = jobs.length;
 
@@ -470,35 +773,44 @@ async function fetchGreenhouseJobs() {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const recentJobs = jobs.filter(job => new Date(job.updated_at) >= thirtyDaysAgo);
+      const recentJobs = jobs.filter(
+        (job) => new Date(job.updated_at) >= thirtyDaysAgo,
+      );
       const recentCount = recentJobs.length;
 
       // 3. Limit per company (Max 60 jobs)
       const limitedJobs = recentJobs.slice(0, 60);
 
       // Filter and map jobs
-      const relevantJobs = limitedJobs.filter(job => {
-        const title = job.title.toLowerCase();
-        // Check for STRICT technical keywords
-        return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
-      }).map(job => ({
-        id: `gh_${company}_${job.id}`,
-        title: job.title,
-        company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
-        location: job.location?.name || 'Remote',
-        type: 'Full-time', // Greenhouse API doesn't always provide type list efficiently here
-        salary: null, // Public API often excludes salary
-        url: job.absolute_url,
-        description: `${job.title} | Location: ${job.location?.name || 'Remote'} | Source: ${company}`, // Enriched description
-        publishedAt: job.updated_at || new Date().toISOString(),
-        source: 'Greenhouse'
-      }));
+      const relevantJobs = limitedJobs
+        .filter((job) => {
+          const title = job.title.toLowerCase();
+          // Check for STRICT technical keywords
+          return GREENHOUSE_KEYWORDS.some((keyword) => title.includes(keyword));
+        })
+        .map((job) => ({
+          id: `gh_${company}_${job.id}`,
+          title: job.title,
+          company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
+          location: job.location?.name || "Remote",
+          type: "Full-time", // Greenhouse API doesn't always provide type list efficiently here
+          salary: null, // Public API often excludes salary
+          url: job.absolute_url,
+          description: `${job.title} | Location: ${job.location?.name || "Remote"} | Source: ${company}`, // Enriched description
+          publishedAt: job.updated_at || new Date().toISOString(),
+          source: "Greenhouse",
+        }));
 
-      console.log(`  - [Greenhouse] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`);
+      console.log(
+        `  - [Greenhouse] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`,
+      );
       allJobs.push(...relevantJobs);
     } catch (error) {
       // Log error but continue to next company
-      console.error(`  - [Greenhouse] Error fetching ${company}:`, error.message);
+      console.error(
+        `  - [Greenhouse] Error fetching ${company}:`,
+        error.message,
+      );
     }
   }
 
@@ -507,12 +819,14 @@ async function fetchGreenhouseJobs() {
 
 // Fetch jobs from Lever boards
 async function fetchLeverJobs() {
-  console.log('🚀 Fetching Lever jobs...');
+  console.log("🚀 Fetching Lever jobs...");
   const allJobs = [];
 
   for (const company of LEVER_COMPANIES) {
     try {
-      const response = await axios.get(`https://api.lever.co/v0/postings/${company}?mode=json`);
+      const response = await axios.get(
+        `https://api.lever.co/v0/postings/${company}?mode=json`,
+      );
       const jobs = response.data || [];
       const totalRaw = jobs.length;
 
@@ -523,31 +837,39 @@ async function fetchLeverJobs() {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const recentJobs = jobs.filter(job => new Date(job.createdAt) >= thirtyDaysAgo);
+      const recentJobs = jobs.filter(
+        (job) => new Date(job.createdAt) >= thirtyDaysAgo,
+      );
       const recentCount = recentJobs.length;
 
       // 3. Limit per company (Max 60 jobs)
       const limitedJobs = recentJobs.slice(0, 60);
 
       // Filter and map jobs
-      const relevantJobs = limitedJobs.filter(job => {
-        const title = job.text.toLowerCase();
-        // Check for STRICT technical keywords (reuse Greenhouse list)
-        return GREENHOUSE_KEYWORDS.some(keyword => title.includes(keyword));
-      }).map(job => ({
-        id: `lever_${company}_${job.id}`,
-        title: job.text.replace(/^\[Job-[^\]]+\]\s*/i, '').trim(),
-        company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
-        location: job.categories?.location || job.country || 'Remote',
-        type: job.categories?.commitment || 'Full-time',
-        salary: null, // Lever API rarely exposes salary in public list
-        url: job.hostedUrl,
-        description: `${job.text} | Location: ${job.categories?.location || 'Remote'} | Source: ${company}`,
-        publishedAt: job.createdAt ? new Date(job.createdAt).toISOString() : new Date().toISOString(),
-        source: 'Lever'
-      }));
+      const relevantJobs = limitedJobs
+        .filter((job) => {
+          const title = job.text.toLowerCase();
+          // Check for STRICT technical keywords (reuse Greenhouse list)
+          return GREENHOUSE_KEYWORDS.some((keyword) => title.includes(keyword));
+        })
+        .map((job) => ({
+          id: `lever_${company}_${job.id}`,
+          title: job.text.replace(/^\[Job-[^\]]+\]\s*/i, "").trim(),
+          company: company.charAt(0).toUpperCase() + company.slice(1), // Capitalize
+          location: job.categories?.location || job.country || "Remote",
+          type: job.categories?.commitment || "Full-time",
+          salary: null, // Lever API rarely exposes salary in public list
+          url: job.hostedUrl,
+          description: `${job.text} | Location: ${job.categories?.location || "Remote"} | Source: ${company}`,
+          publishedAt: job.createdAt
+            ? new Date(job.createdAt).toISOString()
+            : new Date().toISOString(),
+          source: "Lever",
+        }));
 
-      console.log(`  - [Lever] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`);
+      console.log(
+        `  - [Lever] ${company}: fetched ${totalRaw} -> recent ${recentCount} -> relevant ${relevantJobs.length}`,
+      );
       allJobs.push(...relevantJobs);
     } catch (error) {
       console.error(`  - [Lever] Error fetching ${company}:`, error.message);
@@ -560,14 +882,17 @@ async function fetchLeverJobs() {
 // Calculate job priority score
 function calculateJobPriority(job) {
   const titleLower = job.title.toLowerCase();
-  const descLower = (job.description || '').toLowerCase();
+  const descLower = (job.description || "").toLowerCase();
   const combinedText = `${titleLower} ${descLower}`;
   let score = 50; // Base score
 
   // Check for priority keywords (entry-level indicators) - SMALL BOOST (Reduced to 15)
-  const hasPriorityKeyword = PRIORITY_KEYWORDS.some(keyword => combinedText.includes(keyword));
+  const hasPriorityKeyword = PRIORITY_KEYWORDS.some((keyword) =>
+    combinedText.includes(keyword),
+  );
   // Strict internship check (avoid 'junior engineer' being marked as intern)
-  const isInternship = titleLower.includes('intern') || titleLower.includes('internship');
+  const isInternship =
+    titleLower.includes("intern") || titleLower.includes("internship");
 
   if (isInternship) {
     score += 15;
@@ -579,17 +904,34 @@ function calculateJobPriority(job) {
   }
 
   // Check for global remote keywords - ADDITIONAL BOOST
-  const hasGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some(keyword => combinedText.includes(keyword));
-  if (hasGlobalRemote || job.location.toLowerCase().includes('remote')) {
+  const hasGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some((keyword) =>
+    combinedText.includes(keyword),
+  );
+  if (hasGlobalRemote || job.location.toLowerCase().includes("remote")) {
     score += 10;
   }
 
   // Penalize senior/lead positions heavily
   const seniorityPenaltyKeywords = [
-    'senior', 'sr.', 'lead', 'principal', 'staff', 'architect',
-    'director', 'head of', 'vp', 'vice president', 'chief',
-    'expert', '5+ years', '5 years', '6+ years', '7+ years', '8+ years',
-    'experienced', 'seasoned'
+    "senior",
+    "sr.",
+    "lead",
+    "principal",
+    "staff",
+    "architect",
+    "director",
+    "head of",
+    "vp",
+    "vice president",
+    "chief",
+    "expert",
+    "5+ years",
+    "5 years",
+    "6+ years",
+    "7+ years",
+    "8+ years",
+    "experienced",
+    "seasoned",
   ];
 
   for (const keyword of seniorityPenaltyKeywords) {
@@ -600,16 +942,16 @@ function calculateJobPriority(job) {
   }
 
   // Penalize location-restricted jobs
-  const hasLocationRestriction = LOCATION_RESTRICTED_KEYWORDS.some(keyword =>
-    combinedText.includes(keyword)
+  const hasLocationRestriction = LOCATION_RESTRICTED_KEYWORDS.some((keyword) =>
+    combinedText.includes(keyword),
   );
   if (hasLocationRestriction) {
     score -= 30;
   }
 
   // Penalize non-English job postings
-  const hasLanguageRestriction = LANGUAGE_PATTERNS.some(pattern =>
-    combinedText.includes(pattern.toLowerCase())
+  const hasLanguageRestriction = LANGUAGE_PATTERNS.some((pattern) =>
+    combinedText.includes(pattern.toLowerCase()),
   );
   if (hasLanguageRestriction) {
     score -= 35;
@@ -617,30 +959,56 @@ function calculateJobPriority(job) {
 
   // Bonus for popular tech stacks
   const techStackBonus = [
-    'react', 'node', 'python', 'javascript', 'typescript',
-    'aws', 'docker', 'kubernetes',
+    "react",
+    "node",
+    "python",
+    "javascript",
+    "typescript",
+    "aws",
+    "docker",
+    "kubernetes",
     // Backend & Frameworks
-    'java', 'spring', 'spring boot', 'golang', 'fastapi', 'express', 'nestjs', 'dotnet', 'c#',
+    "java",
+    "spring",
+    "spring boot",
+    "golang",
+    "fastapi",
+    "express",
+    "nestjs",
+    "dotnet",
+    "c#",
     // Frontend
-    'nextjs', 'next.js', 'angular', 'vue',
+    "nextjs",
+    "next.js",
+    "angular",
+    "vue",
     // Databases
-    'postgresql', 'mysql', 'redis',
+    "postgresql",
+    "mysql",
+    "redis",
     // Architecture & APIs
-    'graphql', 'microservices', 'rest api',
+    "graphql",
+    "microservices",
+    "rest api",
     // Mobile
-    'flutter', 'kotlin', 'swift', 'react native'
+    "flutter",
+    "kotlin",
+    "swift",
+    "react native",
   ];
 
-  const techMatches = techStackBonus.filter(tech => combinedText.includes(tech)).length;
+  const techMatches = techStackBonus.filter((tech) =>
+    combinedText.includes(tech),
+  ).length;
   score += Math.min(techMatches * 7, 25); // Cap bonus at 25 points
 
   // Company Tiers Bonus
   const companyLower = job.company.toLowerCase();
 
-  if (TOP_TIER_COMPANIES.some(c => companyLower.includes(c))) {
+  if (TOP_TIER_COMPANIES.some((c) => companyLower.includes(c))) {
     score += 4; // Top Tier Bonus (Reduced from 10 to 4 to improve diversity)
-  } else if (GOOD_COMPANIES.some(c => companyLower.includes(c))) {
-    score += 2;  // Mid Tier Bonus (Reduced from 5 to 2)
+  } else if (GOOD_COMPANIES.some((c) => companyLower.includes(c))) {
+    score += 2; // Mid Tier Bonus (Reduced from 5 to 2)
   }
 
   return Math.max(0, score); // Ensure score doesn't go negative
@@ -650,18 +1018,42 @@ function calculateJobPriority(job) {
 function filterJobs(jobs) {
   // Seniority Keywords for HARD REJECTION (Expanded list)
   const SENIOR_KEYWORDS = [
-    'senior', 'sr', 'staff', 'principal', 'lead', 'architect', 'director', 'head', 'vp', 'chief',
-    'engineer iii', 'engineer iv', 'engineer 3', 'engineer 4',
-    'manager', 'engineering manager', 'product manager', 'project manager', 'program manager', 'delivery manager'
+    "senior",
+    "sr",
+    "staff",
+    "principal",
+    "lead",
+    "architect",
+    "director",
+    "head",
+    "vp",
+    "chief",
+    "engineer iii",
+    "engineer iv",
+    "engineer 3",
+    "engineer 4",
+    "manager",
+    "engineering manager",
+    "product manager",
+    "project manager",
+    "program manager",
+    "delivery manager",
   ];
 
   // Experience Regex for 5+ years (Matches "5+ years", "6 years", "10+ years")
   const EXPERIENCE_REGEX = /\b(5|6|7|8|9|10|\d{2,})\+?\s*years?/i;
 
-  return jobs.filter(job => {
+  return jobs.filter((job) => {
+    if (!job || !job.title) {
+      console.warn(
+        "⚠️ Invalid job object encountered (missing title):",
+        JSON.stringify(job),
+      );
+      return false;
+    }
     const titleLower = job.title.toLowerCase();
-    const descLower = (job.description || '').toLowerCase();
-    const companyLower = (job.company || '').toLowerCase();
+    const descLower = (job.description || "").toLowerCase();
+    const companyLower = (job.company || "").toLowerCase();
     const combinedText = `${titleLower} ${descLower} ${companyLower}`;
 
     // Skip if already posted (check both ID and composite key)
@@ -671,37 +1063,35 @@ function filterJobs(jobs) {
     }
 
     // 1. HARD REJECT SENIOR ROLES
-    const isSeniorInTitle = SENIOR_KEYWORDS.some(keyword => titleLower.includes(keyword));
+    const isSeniorInTitle = SENIOR_KEYWORDS.some((keyword) =>
+      titleLower.includes(keyword),
+    );
     if (isSeniorInTitle) {
-
       return false;
     }
 
     // 2. HARD REJECT HIGH EXPERIENCE (> 5 years)
     if (EXPERIENCE_REGEX.test(titleLower) || EXPERIENCE_REGEX.test(descLower)) {
-
       return false;
     }
 
     // 3. EXCLUDE KEYWORDS (Standard) - CHECK TITLE AND COMPANY ONLY
     // We intentionally ignore description to avoid false positives (e.g. "Work with marketing team")
     const excludeCheckText = `${titleLower} ${companyLower}`;
-    const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(keyword =>
-      excludeCheckText.includes(keyword.toLowerCase())
+    const hasExcludeKeyword = EXCLUDE_KEYWORDS.some((keyword) =>
+      excludeCheckText.includes(keyword.toLowerCase()),
     );
     if (hasExcludeKeyword) {
-
       return false;
     }
 
     // 4. MUST MATCH STRICT TECHNICAL KEYWORDS
     // 'engineer' removed from sufficient list. Must have context (Software, Backend, QA, etc.)
-    const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some(keyword =>
-      titleLower.includes(keyword.toLowerCase())
+    const hasTechnicalKeyword = TECHNICAL_KEYWORDS.some((keyword) =>
+      titleLower.includes(keyword.toLowerCase()),
     );
 
     if (!hasTechnicalKeyword) {
-
       return false;
     }
 
@@ -709,14 +1099,16 @@ function filterJobs(jobs) {
     const locationLower = job.location.toLowerCase();
 
     // Check for India location
-    const isIndia = INDIA_LOCATIONS.some(loc => locationLower.includes(loc));
+    const isIndia = INDIA_LOCATIONS.some((loc) => locationLower.includes(loc));
 
     // Check for Global Remote
     // "Treat a job as global remote ONLY if location or description contains: worldwide, anywhere, global, work from anywhere, location independent"
     // We check combined keywords against Title, Description, and Location
     const fullTextForRemoteCheck = `${titleLower} ${descLower} ${locationLower}`;
-    const isGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some(k => fullTextForRemoteCheck.includes(k));
-    const isRemote = locationLower.includes('remote');
+    const isGlobalRemote = GLOBAL_REMOTE_KEYWORDS.some((k) =>
+      fullTextForRemoteCheck.includes(k),
+    );
+    const isRemote = locationLower.includes("remote");
 
     // Allow job ONLY if: isIndia OR (isRemote AND isGlobalRemote)
     if (isIndia || (isRemote && isGlobalRemote)) {
@@ -739,7 +1131,7 @@ function formatJobMessage(job, priority = 0) {
   job.title = cleanJobTitle(job.title);
 
   // 2. Infer Type if missing
-  if (!job.type || job.type === 'undefined') {
+  if (!job.type || job.type === "undefined") {
     job.type = inferJobType(job);
   }
 
@@ -747,7 +1139,7 @@ function formatJobMessage(job, priority = 0) {
   if (originalTitle !== job.title) {
     console.log(`✨ Fixed Title: "${originalTitle}" -> "${job.title}"`);
   }
-  if (!originalType || originalType === 'undefined') {
+  if (!originalType || originalType === "undefined") {
     console.log(`✨ Inferred Type: "${job.type}" for "${job.title}"`);
   }
 
@@ -756,8 +1148,8 @@ function formatJobMessage(job, priority = 0) {
   job.location = normalizeLocation(job.location);
 
   const emoji = getJobEmoji(job);
-  const hotBadge = priority >= 50 ? '🔥 HOT ' : '';
-  const salaryText = job.salary ? job.salary.trim() : 'Not disclosed';
+  const hotBadge = priority >= 50 ? "🔥 HOT " : "";
+  const salaryText = job.salary ? job.salary.trim() : "Not disclosed";
 
   // Generate hashtags
   const hashtags = generateHashtags(job);
@@ -780,51 +1172,61 @@ ${hashtags}`;
 
 // Generate hashtags based on job details
 function generateHashtags(job) {
-  const tags = ['#DeveloperJobs']; // Always include this
-  const searchText = `${job.title} ${job.description || ''} `.toLowerCase();
+  const tags = ["#DeveloperJobs"]; // Always include this
+  const searchText = `${job.title} ${job.description || ""} `.toLowerCase();
   const titleLower = job.title.toLowerCase();
 
   // Job level tags - STRICTER LOGIC
   // #Internships: Only if title explicitly mentions it
-  if (titleLower.includes('intern')) {
-    tags.push('#Internships');
+  if (titleLower.includes("intern")) {
+    tags.push("#Internships");
   }
   // #JuniorDev: Only for junior/entry/trainee in TITLE
-  else if (titleLower.includes('junior') || titleLower.includes('trainee') || titleLower.includes('entry') || titleLower.includes('graduate')) {
-    tags.push('#JuniorDev', '#EntryLevel');
+  else if (
+    titleLower.includes("junior") ||
+    titleLower.includes("trainee") ||
+    titleLower.includes("entry") ||
+    titleLower.includes("graduate")
+  ) {
+    tags.push("#JuniorDev", "#EntryLevel");
   }
   // #SeniorDev: Only for senior/lead/principal in TITLE
-  else if (titleLower.includes('senior') || titleLower.includes('lead') || titleLower.includes('principal') || titleLower.includes('staff')) {
-    tags.push('#SeniorDev', '#Experienced');
+  else if (
+    titleLower.includes("senior") ||
+    titleLower.includes("lead") ||
+    titleLower.includes("principal") ||
+    titleLower.includes("staff")
+  ) {
+    tags.push("#SeniorDev", "#Experienced");
   }
 
   // Technology tags - Check Title & Description
   const techTags = {
-    'python': '#Python',
-    'javascript': '#JavaScript',
-    'typescript': '#TypeScript',
-    'react': '#React',
-    'node': '#NodeJS',
-    'java': '#Java',
-    'golang': '#Golang',
-    'rust': '#Rust',
-    'devops': '#DevOps',
-    'frontend': '#Frontend',
-    'backend': '#Backend',
-    'fullstack': '#FullStack',
-    'full stack': '#FullStack',
-    'mobile': '#Mobile',
-    'android': '#Android',
-    'ios': '#iOS',
-    'rub': '#Ruby',
-    'rails': '#RubyOnRails',
-    'c++': '#Cpp',
-    'c#': '#CSharp',
-    '.net': '#DotNet',
-    'aws': '#AWS',
-    'azure': '#Azure',
-    'docker': '#Docker',
-    'kubernetes': '#Kubernetes'
+    python: "#Python",
+    javascript: "#JavaScript",
+    typescript: "#TypeScript",
+    react: "#React",
+    node: "#NodeJS",
+    java: "#Java",
+    golang: "#Golang",
+    rust: "#Rust",
+    devops: "#DevOps",
+    frontend: "#Frontend",
+    backend: "#Backend",
+    fullstack: "#FullStack",
+    "full stack": "#FullStack",
+    mobile: "#Mobile",
+    android: "#Android",
+    ios: "#iOS",
+    rub: "#Ruby",
+    rails: "#RubyOnRails",
+    "c++": "#Cpp",
+    "c#": "#CSharp",
+    ".net": "#DotNet",
+    aws: "#AWS",
+    azure: "#Azure",
+    docker: "#Docker",
+    kubernetes: "#Kubernetes",
   };
 
   for (const [keyword, tag] of Object.entries(techTags)) {
@@ -837,32 +1239,32 @@ function generateHashtags(job) {
 
   // Add generic remote/job type tags if space permits
   if (tags.length < 7) {
-    if (job.location.toLowerCase().includes('remote')) tags.push('#RemoteJobs');
-    if (job.type.toLowerCase() === 'full-time') tags.push('#FullTime');
+    if (job.location.toLowerCase().includes("remote")) tags.push("#RemoteJobs");
+    if (job.type.toLowerCase() === "full-time") tags.push("#FullTime");
   }
 
-  return tags.slice(0, 7).join(' '); // Final safely-limit
+  return tags.slice(0, 7).join(" "); // Final safely-limit
 }
 
 // --- Presentation Helper Functions ---
 
 function cleanJobTitle(title) {
-  if (!title) return 'Software Engineer';
+  if (!title) return "Software Engineer";
 
   let cleaned = title
-    .replace(/_/g, ' ') // Replace underscores
-    .replace(/\s+/g, ' ') // Collapse spaces
+    .replace(/_/g, " ") // Replace underscores
+    .replace(/\s+/g, " ") // Collapse spaces
     .trim();
 
   // Convert all-caps or weird-caps words (heuristic)
   // We won't strictly lowercase everything to preserve acronyms like 'AWS', 'PHP'
   // But we can Capitalize Words if the whole string is uppercase
   if (cleaned === cleaned.toUpperCase() && cleaned.length > 4) {
-    cleaned = cleaned.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    cleaned = cleaned.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   // Remove common separators at the end
-  cleaned = cleaned.replace(/[-|:;,]+$/, '').trim();
+  cleaned = cleaned.replace(/[-|:;,]+$/, "").trim();
 
   // Format specific "Title_Tech" patterns to "Title (Tech)"
   // e.g., "Software Engineer Python" -> "Software Engineer (Python)" if it looks like a suffix
@@ -872,40 +1274,46 @@ function cleanJobTitle(title) {
 }
 
 function inferJobType(job) {
-  const text = `${job.title} ${job.description || ''}`.toLowerCase();
+  const text = `${job.title} ${job.description || ""}`.toLowerCase();
 
-  if (text.includes('intern') || text.includes('internship')) return 'Internship';
-  if (text.includes('contract') || text.includes('freelance')) return 'Contract';
-  if (text.includes('part-time') || text.includes('part time')) return 'Part-time';
+  if (text.includes("intern") || text.includes("internship"))
+    return "Internship";
+  if (text.includes("contract") || text.includes("freelance"))
+    return "Contract";
+  if (text.includes("part-time") || text.includes("part time"))
+    return "Part-time";
 
-  return 'Full-time'; // Default safe fallback
+  return "Full-time"; // Default safe fallback
 }
 
 function normalizeCompany(company) {
-  if (!company) return 'Unknown Company';
+  if (!company) return "Unknown Company";
   let cleaned = company.trim();
 
   // Fix specific messy cases
-  if (cleaned.toLowerCase() === 'dell technologies ltd') return 'Dell Technologies';
-  if (cleaned.toLowerCase() === 'boschgroup') return 'Bosch';
-  if (cleaned.toLowerCase().includes('capgemini')) return 'Capgemini';
+  if (cleaned.toLowerCase() === "dell technologies ltd")
+    return "Dell Technologies";
+  if (cleaned.toLowerCase() === "boschgroup") return "Bosch";
+  if (cleaned.toLowerCase().includes("capgemini")) return "Capgemini";
 
   // Generic Title Case for all-caps
   if (cleaned === cleaned.toUpperCase() && cleaned.length > 3) {
-    cleaned = cleaned.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    cleaned = cleaned.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   return cleaned;
 }
 
 function normalizeLocation(location) {
-  if (!location) return 'Remote';
-  let cleaned = location.replace(/\b, in\b/yi, ', India').replace(/\b, in\./yi, ', India');
+  if (!location) return "Remote";
+  let cleaned = location
+    .replace(/\b, in\b/iy, ", India")
+    .replace(/\b, in\./iy, ", India");
 
-  if (cleaned.match(/^bangalore/i)) cleaned = 'Bangalore, India';
-  if (cleaned.match(/^bengaluru/i)) cleaned = 'Bangalore, India';
-  if (cleaned.match(/^pune/i)) cleaned = 'Pune, India';
-  if (cleaned.match(/^hyderabad/i)) cleaned = 'Hyderabad, India';
+  if (cleaned.match(/^bangalore/i)) cleaned = "Bangalore, India";
+  if (cleaned.match(/^bengaluru/i)) cleaned = "Bangalore, India";
+  if (cleaned.match(/^pune/i)) cleaned = "Pune, India";
+  if (cleaned.match(/^hyderabad/i)) cleaned = "Hyderabad, India";
 
   return cleaned;
 }
@@ -914,15 +1322,15 @@ function normalizeLocation(location) {
 function getJobEmoji(job) {
   const title = job.title.toLowerCase();
 
-  if (title.includes('intern')) return '🎓';
-  if (title.includes('junior') || title.includes('trainee')) return '🌱';
-  if (title.includes('senior')) return '🚀';
-  if (title.includes('frontend')) return '🎨';
-  if (title.includes('backend')) return '⚙️';
-  if (title.includes('full stack') || title.includes('fullstack')) return '🔄';
-  if (title.includes('mobile')) return '📱';
-  if (title.includes('devops')) return '🔧';
-  return '💻';
+  if (title.includes("intern")) return "🎓";
+  if (title.includes("junior") || title.includes("trainee")) return "🌱";
+  if (title.includes("senior")) return "🚀";
+  if (title.includes("frontend")) return "🎨";
+  if (title.includes("backend")) return "⚙️";
+  if (title.includes("full stack") || title.includes("fullstack")) return "🔄";
+  if (title.includes("mobile")) return "📱";
+  if (title.includes("devops")) return "🔧";
+  return "💻";
 }
 
 // Post job to Telegram channel
@@ -930,8 +1338,8 @@ async function postJobToChannel(job, priority = 0) {
   try {
     const message = formatJobMessage(job, priority);
     await bot.sendMessage(config.channelId, message, {
-      parse_mode: 'HTML',
-      disable_web_page_preview: true
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
     });
 
     // Mark as posted (both ID and composite key)
@@ -940,7 +1348,9 @@ async function postJobToChannel(job, priority = 0) {
     postedJobs.add(compositeKey);
     await savePostedJobs();
 
-    console.log(`✅ Posted: ${job.title} at ${job.company} (Priority: ${priority})`);
+    console.log(
+      `✅ Posted: ${job.title} at ${job.company} (Priority: ${priority})`,
+    );
     return true;
   } catch (error) {
     console.error(`❌ Error posting job ${job.id}: `, error.message);
@@ -991,7 +1401,7 @@ function selectRoundRobinJobs(jobs, limit) {
 
 // Fetch SmartRecruiters (Public API)
 async function fetchSmartRecruitersJobs() {
-  console.log('Fetching SmartRecruiters jobs...');
+  console.log("Fetching SmartRecruiters jobs...");
   const allJobs = [];
 
   for (const company of SMARTRECRUITERS_COMPANIES) {
@@ -1003,11 +1413,15 @@ async function fetchSmartRecruitersJobs() {
 
       for (const job of jobs) {
         // Location processing
-        let locationStr = 'Unknown';
+        let locationStr = "Unknown";
         if (job.location) {
-          const parts = [job.location.city, job.location.region, job.location.country].filter(Boolean);
-          locationStr = parts.join(', ');
-          if (job.location.remote) locationStr += ' (Remote)';
+          const parts = [
+            job.location.city,
+            job.location.region,
+            job.location.country,
+          ].filter(Boolean);
+          locationStr = parts.join(", ");
+          if (job.location.remote) locationStr += " (Remote)";
         }
 
         allJobs.push({
@@ -1018,11 +1432,13 @@ async function fetchSmartRecruitersJobs() {
           description: job.name, // List API doesn't provide full description, rely on Title for keywords
           url: `https://jobs.smartrecruiters.com/${company.id}/${job.id}`,
           publishedAt: job.releasedDate, // ISO Date
-          source: 'SmartRecruiters'
+          source: "SmartRecruiters",
         });
       }
     } catch (e) {
-      console.error(`Error fetching SmartRecruiters for ${company.name}: ${e.message}`);
+      console.error(
+        `Error fetching SmartRecruiters for ${company.name}: ${e.message}`,
+      );
     }
   }
   return allJobs;
@@ -1030,7 +1446,7 @@ async function fetchSmartRecruitersJobs() {
 
 // Fetch Workday (JSON Endpoint)
 async function fetchWorkdayJobs() {
-  console.log('Fetching Workday jobs...');
+  console.log("Fetching Workday jobs...");
   const allJobs = [];
 
   for (const company of WORKDAY_COMPANIES) {
@@ -1042,20 +1458,21 @@ async function fetchWorkdayJobs() {
       try {
         const url = `https://${company.tenant}.${company.host}.myworkdayjobs.com/wday/cxs/${company.tenant}/${company.site}/jobs`;
         const payload = {
-          "appliedFacets": {},
-          "limit": 20,
-          "offset": offset,
-          "searchText": ""
+          appliedFacets: {},
+          limit: 20,
+          offset: offset,
+          searchText: "",
         };
 
         const response = await axios.post(url, payload, {
           headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
+            "Content-Type": "application/json",
+            Accept: "application/json",
             // IMPORTANT: Browser UA required to avoid blocking
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
           },
-          timeout: 10000
+          timeout: 10000,
         });
 
         const jobs = response.data.jobPostings || [];
@@ -1066,21 +1483,25 @@ async function fetchWorkdayJobs() {
           const fullUrl = `https://${company.tenant}.${company.host}.myworkdayjobs.com/${company.site}${job.externalPath}`;
 
           // Construct description from potential fields
-          const desc = job.bulletFields ? job.bulletFields.join(' ') : job.title;
+          const desc = job.bulletFields
+            ? job.bulletFields.join(" ")
+            : job.title;
 
           allJobs.push({
-            id: `workday-${company.tenant}-${job.bulletFields ? job.bulletFields[0] : job.externalPath.replace(/\//g, '-')}`,
+            id: `workday-${company.tenant}-${job.bulletFields ? job.bulletFields[0] : job.externalPath.replace(/\//g, "-")}`,
             title: job.title,
             company: company.name,
-            location: job.locationsText || 'Unknown',
+            location: job.locationsText || "Unknown",
             description: desc,
             url: fullUrl,
             publishedAt: job.postedOn,
-            source: 'Workday'
+            source: "Workday",
           });
         }
       } catch (e) {
-        console.error(`Error fetching Workday for ${company.name} (Offset ${offset}): ${e.message}`);
+        console.error(
+          `Error fetching Workday for ${company.name} (Offset ${offset}): ${e.message}`,
+        );
         // Continue to next page or company
       }
     }
@@ -1090,18 +1511,26 @@ async function fetchWorkdayJobs() {
 
 // Main job fetching and posting function
 async function fetchAndPostJobs() {
-  console.log('\n🔍 Starting job fetch cycle...');
+  console.log("\n🔍 Starting job fetch cycle...");
 
   try {
     // Fetch from all sources
-    const [remotiveJobs, weworkremotelyJobs, unstopJobs, greenhouseJobs, leverJobs, smartRecruitersJobs, workdayJobs] = await Promise.all([
+    const [
+      remotiveJobs,
+      weworkremotelyJobs,
+      unstopJobs,
+      greenhouseJobs,
+      leverJobs,
+      smartRecruitersJobs,
+      workdayJobs,
+    ] = await Promise.all([
       fetchRemotiveJobs(),
       fetchWeWorkRemotelyJobs(),
       fetchUnstopJobs(),
       fetchGreenhouseJobs(),
       fetchLeverJobs(),
       fetchSmartRecruitersJobs(),
-      fetchWorkdayJobs()
+      fetchWorkdayJobs(),
     ]);
 
     console.log(`Sources summary:
@@ -1114,30 +1543,45 @@ SmartRecruiters: ${smartRecruitersJobs.length}
 Workday: ${workdayJobs.length}`);
 
     // Combine and filter
-    const allJobs = [...remotiveJobs, ...weworkremotelyJobs, ...unstopJobs, ...greenhouseJobs, ...leverJobs, ...smartRecruitersJobs, ...workdayJobs];
+    const allJobs = [
+      ...remotiveJobs,
+      ...weworkremotelyJobs,
+      ...unstopJobs,
+      ...greenhouseJobs,
+      ...leverJobs,
+      ...smartRecruitersJobs,
+      ...workdayJobs,
+    ];
+
     const newJobs = filterJobs(allJobs);
 
-    console.log(`📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`);
+    console.log(
+      `📊 Found ${allJobs.length} total jobs, ${newJobs.length} new relevant jobs`,
+    );
 
     if (newJobs.length === 0) {
-      console.log('No new jobs to post');
+      console.log("No new jobs to post");
       return;
     }
 
     // Calculate priority for each job
-    const jobsWithPriority = newJobs.map(job => ({
+    const jobsWithPriority = newJobs.map((job) => ({
       ...job,
-      priority: calculateJobPriority(job)
+      priority: calculateJobPriority(job),
     }));
 
     // Filter out jobs with very low priority (typically senior roles)
     const MIN_PRIORITY_THRESHOLD = 10;
-    const qualifiedJobs = jobsWithPriority.filter(job => job.priority >= MIN_PRIORITY_THRESHOLD);
+    const qualifiedJobs = jobsWithPriority.filter(
+      (job) => job.priority >= MIN_PRIORITY_THRESHOLD,
+    );
 
-    console.log(`🎯 ${qualifiedJobs.length} jobs meet priority threshold(>= ${MIN_PRIORITY_THRESHOLD})`);
+    console.log(
+      `🎯 ${qualifiedJobs.length} jobs meet priority threshold(>= ${MIN_PRIORITY_THRESHOLD})`,
+    );
 
     if (qualifiedJobs.length === 0) {
-      console.log('No jobs meet the minimum priority threshold');
+      console.log("No jobs meet the minimum priority threshold");
       return;
     }
 
@@ -1160,20 +1604,24 @@ Workday: ${workdayJobs.length}`);
     jobsToPost.sort((a, b) => b.priority - a.priority);
 
     // Count types for logging
-    const internCount = jobsToPost.filter(j => j.title.toLowerCase().includes('intern')).length;
+    const internCount = jobsToPost.filter((j) =>
+      j.title.toLowerCase().includes("intern"),
+    ).length;
     const ftCount = jobsToPost.length - internCount;
 
-    console.log(`📤 Posting ${jobsToPost.length} jobs(${ftCount} FT, ${internCount} Interns)...`);
+    console.log(
+      `📤 Posting ${jobsToPost.length} jobs(${ftCount} FT, ${internCount} Interns)...`,
+    );
 
     for (const job of jobsToPost) {
       await postJobToChannel(job, job.priority);
       // Add delay between posts to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    console.log('✅ Job posting cycle completed');
+    console.log("✅ Job posting cycle completed");
   } catch (error) {
-    console.error('❌ Error in job fetch cycle:', error);
+    console.error("❌ Error in job fetch cycle:", error);
   }
 }
 
@@ -1184,16 +1632,19 @@ bot.onText(/\/post (.+)/, async (msg, match) => {
 
   // Check if user is admin
   if (userId !== config.adminId) {
-    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    await bot.sendMessage(chatId, "❌ Unauthorized. Admin only.");
     return;
   }
 
   try {
     const jobData = match[1];
-    const lines = jobData.split('\n').filter(l => l.trim());
+    const lines = jobData.split("\n").filter((l) => l.trim());
 
     if (lines.length < 3) {
-      await bot.sendMessage(chatId, '❌ Invalid format. Use:\n/post\nJob Title\nCompany Name\nJob Type\nApply URL');
+      await bot.sendMessage(
+        chatId,
+        "❌ Invalid format. Use:\n/post\nJob Title\nCompany Name\nJob Type\nApply URL",
+      );
       return;
     }
 
@@ -1203,15 +1654,15 @@ bot.onText(/\/post (.+)/, async (msg, match) => {
       id: `manual_${Date.now()} `,
       title,
       company,
-      location: 'Remote',
+      location: "Remote",
       type,
       url,
-      description: '',
-      source: 'Manual'
+      description: "",
+      source: "Manual",
     };
 
     await postJobToChannel(job);
-    await bot.sendMessage(chatId, '✅ Job posted successfully!');
+    await bot.sendMessage(chatId, "✅ Job posted successfully!");
   } catch (error) {
     await bot.sendMessage(chatId, `❌ Error: ${error.message} `);
   }
@@ -1223,7 +1674,7 @@ bot.onText(/\/stats/, async (msg) => {
   const userId = msg.from.id.toString();
 
   if (userId !== config.adminId) {
-    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    await bot.sendMessage(chatId, "❌ Unauthorized. Admin only.");
     return;
   }
 
@@ -1235,7 +1686,7 @@ bot.onText(/\/stats/, async (msg) => {
 
 ✅ Bot is running`;
 
-  await bot.sendMessage(chatId, stats, { parse_mode: 'HTML' });
+  await bot.sendMessage(chatId, stats, { parse_mode: "HTML" });
 });
 
 // Admin command: Force job fetch
@@ -1244,13 +1695,13 @@ bot.onText(/\/fetch/, async (msg) => {
   const userId = msg.from.id.toString();
 
   if (userId !== config.adminId) {
-    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    await bot.sendMessage(chatId, "❌ Unauthorized. Admin only.");
     return;
   }
 
-  await bot.sendMessage(chatId, '🔍 Fetching jobs...');
+  await bot.sendMessage(chatId, "🔍 Fetching jobs...");
   await fetchAndPostJobs();
-  await bot.sendMessage(chatId, '✅ Fetch completed!');
+  await bot.sendMessage(chatId, "✅ Fetch completed!");
 });
 
 // Admin command: Clear job history (use carefully!)
@@ -1259,13 +1710,13 @@ bot.onText(/\/clear/, async (msg) => {
   const userId = msg.from.id.toString();
 
   if (userId !== config.adminId) {
-    await bot.sendMessage(chatId, '❌ Unauthorized. Admin only.');
+    await bot.sendMessage(chatId, "❌ Unauthorized. Admin only.");
     return;
   }
 
   postedJobs.clear();
   await savePostedJobs();
-  await bot.sendMessage(chatId, '✅ Job history cleared!');
+  await bot.sendMessage(chatId, "✅ Job history cleared!");
 });
 
 // Help command
@@ -1294,14 +1745,14 @@ bot.onText(/\/help/, async (msg) => {
 
       < i > Bot automatically posts jobs every 3 hours</i > `;
 
-  await bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
+  await bot.sendMessage(chatId, help, { parse_mode: "HTML" });
 });
 
 // Get next cron execution time
 function getNextCronTime() {
   try {
     const interval = cronParser.parseExpression(config.cronSchedule, {
-      tz: "Asia/Kolkata"
+      tz: "Asia/Kolkata",
     });
 
     const next = interval.next().toDate();
@@ -1310,7 +1761,7 @@ function getNextCronTime() {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
-      timeZone: "Asia/Kolkata"
+      timeZone: "Asia/Kolkata",
     });
   } catch (err) {
     console.error("Error parsing cron:", err);
@@ -1318,21 +1769,24 @@ function getNextCronTime() {
   }
 }
 
-
 // Initialize bot
 async function init() {
-  console.log('🤖 Remote Dev Jobs Bot Starting...');
+  console.log("🤖 Remote Dev Jobs Bot Starting...");
 
   // Load previous job history
   await loadPostedJobs();
 
   // Schedule automatic job posting
-  cron.schedule(config.cronSchedule, async () => {
-    console.log('\n⏰ Scheduled job fetch triggered');
-    await fetchAndPostJobs();
-  }, {
-    timezone: "Asia/Kolkata"
-  });
+  cron.schedule(
+    config.cronSchedule,
+    async () => {
+      console.log("\n⏰ Scheduled job fetch triggered");
+      await fetchAndPostJobs();
+    },
+    {
+      timezone: "Asia/Kolkata",
+    },
+  );
 
   console.log(`✅ Bot started successfully!`);
   console.log(`📢 Channel ID: ${config.channelId} `);
@@ -1342,50 +1796,50 @@ async function init() {
 
   // Run initial fetch on startup
   try {
-    console.log('🚀 Running initial job fetch...');
+    console.log("🚀 Running initial job fetch...");
     await fetchAndPostJobs();
   } catch (error) {
-    console.error('❌ Error during initial fetch:', error);
+    console.error("❌ Error during initial fetch:", error);
   }
 }
 
 // Health check server for Render
 const app = express();
 
-app.get('/', (req, res) => {
-  res.send('Bot is running');
+app.get("/", (req, res) => {
+  res.send("Bot is running");
 });
 
 // Middleware to parse JSON bodies for webhook updates
 app.use(express.json());
 
 // Webhook route for Telegram updates
-app.post('/bot', (req, res) => {
+app.post("/bot", (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+app.get("/health", (req, res) => {
+  res.json({ status: "healthy" });
 });
 
 // Manual trigger endpoint for job fetching
-app.get('/trigger-fetch', async (req, res) => {
+app.get("/trigger-fetch", async (req, res) => {
   try {
-    console.log('🔄 Manual fetch triggered via HTTP endpoint');
+    console.log("🔄 Manual fetch triggered via HTTP endpoint");
     res.json({
-      status: 'started',
-      message: 'Job fetch cycle started. Check logs for progress.'
+      status: "started",
+      message: "Job fetch cycle started. Check logs for progress.",
     });
 
     // Run fetch in background
-    fetchAndPostJobs().catch(err => {
-      console.error('Error in manual fetch:', err);
+    fetchAndPostJobs().catch((err) => {
+      console.error("Error in manual fetch:", err);
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 });
@@ -1394,20 +1848,20 @@ app.get('/trigger-fetch', async (req, res) => {
 init().catch(console.error);
 
 // Start health check server IMMEDIATELY to satisfy port binding requirements
-const server = app.listen(config.port, '0.0.0.0', () => {
+const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`🌐 Health check server running on port ${config.port}`);
 });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n👋 Shutting down bot...');
+process.on("SIGINT", async () => {
+  console.log("\n👋 Shutting down bot...");
   server.close();
   await savePostedJobs();
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('\n👋 Shutting down bot...');
+process.on("SIGTERM", async () => {
+  console.log("\n👋 Shutting down bot...");
   server.close();
   await savePostedJobs();
   process.exit(0);
