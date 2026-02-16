@@ -1,16 +1,15 @@
 # 🤖 Remote Dev Jobs Telegram Bot
 
-An automated Telegram bot that posts remote developer jobs and internships to your channel. Fetches from **5 job sources** with smart filtering for entry-level and globally accessible roles.
+An automated Telegram bot that posts remote developer jobs and internships to your channel. Fetches from **7 job sources** (including direct ATS integration) with smart filtering for entry-level and globally accessible roles.
 
 ## ✨ Features
 
-- ✅ **5 Job Sources** - Remotive, Arbeitnow, RemoteOK, WeWorkRemotely, Unstop
-- ✅ **Smart Filtering** - Prioritizes entry-level roles, filters out senior positions
-- ✅ **Global Focus** - Excludes location-restricted and non-English jobs
-- ✅ **Duplicate Prevention** - Never posts the same job twice
-- ✅ **Priority Scoring** - Ranks jobs by relevance (internships, junior roles get priority)
-- ✅ **Scheduled Posting** - Automated posting every 3 hours
-- ✅ **Admin Commands** - Manual posting and bot management
+- ✅ **7 Job Sources** - Remotive, WeWorkRemotely, Unstop, Greenhouse, Lever, SmartRecruiters, Workday
+- ✅ **Strict Filtering** - Automatically rejects senior/manager roles and roles requiring > 5 years experience
+- ✅ **Location Focus** - Only posts jobs located in **India** or **True Global Remote** (Worldwide/Anywhere)
+- ✅ **Smart Scoring** - Prioritizes internships and junior roles
+- ✅ **Duplicate Prevention** - Tracks posted jobs to avoid spam
+- ✅ **Scheduled Posting** - Automated posting every 3 hours (customizable)
 
 ## 📋 Prerequisites
 
@@ -23,7 +22,7 @@ An automated Telegram bot that posts remote developer jobs and internships to yo
 ### 1. Create Telegram Bot
 
 1. Message [@BotFather](https://t.me/BotFather) → `/newbot`
-2. Save the bot token: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`
+2. Save the bot token.
 
 ### 2. Create Telegram Channel
 
@@ -34,19 +33,19 @@ An automated Telegram bot that posts remote developer jobs and internships to yo
 ### 3. Get Admin User ID
 
 1. Message [@userinfobot](https://t.me/userinfobot) → `/start`
-2. Save your user ID: `123456789`
+2. Save your user ID.
 
 ### 4. Install & Configure
 
 ```bash
+git clone https://github.com/yourusername/remote-dev-jobs-bot.git
 cd remote-dev-jobs-bot
 npm install
-
-# Create .env file
 cp .env.example .env
 ```
 
 Edit `.env`:
+
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHANNEL_ID=@yourchannelname
@@ -63,12 +62,13 @@ npm start
 
 ## 🎮 Admin Commands
 
-- `/stats` - Bot statistics
-- `/fetch` - Manually fetch jobs now
-- `/clear` - Clear job history
+- `/stats` - Bot statistics and next run time
+- `/fetch` - Manually trigger a job fetch cycle
+- `/clear` - Clear job history (use with caution)
 - `/help` - Show commands
 
 **Manual posting:**
+
 ```
 /post
 Job Title
@@ -80,19 +80,29 @@ https://apply-link.com
 ## 📊 How It Works
 
 **Every 3 hours:**
-1. Fetch from 5 job sources
-2. Filter for developer/tech roles
-3. Calculate priority scores (entry-level roles ranked higher)
-4. Remove duplicates & location-restricted jobs
-5. Post top 5 jobs to channel
 
-### Job Sources
+1. **Fetch**: Scrapes jobs from APIs (Remotive, Unstop) and direct ATS boards (Greenhouse, Lever, SmartRecruiters, Workday).
+2. **Filter**:
+   - **Reject**: Senior, Staff, Principal, Manager, Director, VP roles.
+   - **Reject**: Experience > 5 years.
+   - **Reject**: Locations not matching "India" or "Remote" (with global keywords).
+   - **Reject**: Non-technical roles (Sales, Marketing, HR, etc.).
+3. **Score**: Adds points for Internships, popular tech stacks, and top-tier companies.
+4. **Post**: Sends the top high-quality jobs to your Telegram channel.
 
-- **Remotive** - Remote job board API
-- **Arbeitnow** - European remote jobs
-- **RemoteOK** - Popular remote job aggregator
-- **WeWorkRemotely** - Programming jobs RSS
-- **Unstop** - Indian internships & jobs
+## 📁 Project Structure
+
+```
+remote-dev-jobs-bot/
+├── bot.js                       # Main bot logic & schedulers
+├── greenhouseCompanies.js       # List of Greenhouse boards
+├── leverCompanies.js            # List of Lever boards
+├── smartRecruitersCompanies.js  # List of SmartRecruiters boards
+├── workdayCompanies.js          # List of Workday boards
+├── posted_jobs.json             # History of posted jobs
+├── package.json                 # Dependencies
+└── .env                         # Configuration
+```
 
 ## 🌐 Deployment
 
@@ -112,55 +122,6 @@ pm2 save
 pm2 startup
 ```
 
-## � Customization
+## 📄 License
 
-**Change posting frequency** (`.env`):
-```env
-CRON_SCHEDULE=0 */2 * * *  # Every 2 hours
-CRON_SCHEDULE=0 9,18 * * *  # Twice daily
-```
-
-**Adjust jobs per batch** (`.env`):
-```env
-POSTS_PER_BATCH=10
-```
-
-**Customize keywords** (`bot.js`):
-- Edit `JOB_KEYWORDS` array for inclusion filters
-- Edit `EXCLUDE_KEYWORDS` array for exclusion filters
-- Edit `PRIORITY_KEYWORDS` for entry-level role prioritization
-
-## 📁 Project Structure
-
-```
-remote-dev-jobs-bot/
-├── bot.js                 # Main bot logic
-├── package.json           # Dependencies
-├── .env                   # Configuration (create from .env.example)
-├── posted_jobs.json       # Auto-generated job history
-├── documentation/         # Detailed guides
-└── README.md
-```
-
-## 🐛 Troubleshooting
-
-**Bot doesn't post:**
-- Verify bot has admin rights in channel
-- Check channel ID is correct
-- Review logs for errors
-
-**"Unauthorized" error:**
-- Verify `TELEGRAM_BOT_TOKEN` is correct
-- Ensure bot is added to channel as admin
-
-**Get numeric channel ID:**
-1. Forward a message from your channel to [@userinfobot](https://t.me/userinfobot)
-2. Use the channel ID (like `-1001234567890`) in `.env`
-
-##  License
-
-MIT License - Free to use and modify!
-
----
-
-**Good luck with your remote jobs bot! 🚀**
+MIT License

@@ -673,13 +673,13 @@ function filterJobs(jobs) {
     // 1. HARD REJECT SENIOR ROLES
     const isSeniorInTitle = SENIOR_KEYWORDS.some(keyword => titleLower.includes(keyword));
     if (isSeniorInTitle) {
-      console.log(`❌ Rejected (Senior/Manager): ${job.title}`);
+
       return false;
     }
 
     // 2. HARD REJECT HIGH EXPERIENCE (> 5 years)
     if (EXPERIENCE_REGEX.test(titleLower) || EXPERIENCE_REGEX.test(descLower)) {
-      console.log(`❌ Rejected (Experience): ${job.title}`);
+
       return false;
     }
 
@@ -690,7 +690,7 @@ function filterJobs(jobs) {
       excludeCheckText.includes(keyword.toLowerCase())
     );
     if (hasExcludeKeyword) {
-      console.log(`❌ Rejected (Excluded): ${job.title}`);
+
       return false;
     }
 
@@ -701,7 +701,7 @@ function filterJobs(jobs) {
     );
 
     if (!hasTechnicalKeyword) {
-      console.log(`❌ Rejected (Non-tech): ${job.title}`);
+
       return false;
     }
 
@@ -724,7 +724,7 @@ function filterJobs(jobs) {
     }
 
     // Reject everything else (Regional remote, generic remote without global keywords, non-India)
-    console.log(`❌ Rejected (Location): ${job.title} | ${job.location}`);
+
     return false;
   });
 }
